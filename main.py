@@ -46,12 +46,29 @@ def print_usage():
 
 def handle_video_with_subtitle(url, summary_level=None):
     """
-    处理有字幕的视频
+    处理有字幕的视频（支持自动模式：无字幕时自动切换到音频转写）
 
     Args:
         url: B站视频URL
         summary_level: 总结程度 ("brief", "normal", "detailed")
     """
+    # 获取视频信息，用于智能选择总结力度
+    video_info = speech_to_text.get_bilibili_video_info(url)
+    auto_summary_level = None
+
+    if video_info:
+        duration = video_info.get('duration', 0)
+        if duration > 0:
+            auto_summary_level = config.auto_select_summary_level(duration)
+            minutes = duration // 60
+            seconds = duration % 60
+            print(f"[主流程] 视频时长: {minutes}分{seconds}秒")
+            print(f"[主流程] 智能推荐总结程度: {auto_summary_level}")
+
+            # 如果用户未指定总结程度，使用智能推荐
+            if summary_level is None:
+                summary_level = auto_summary_level
+
     # 获取总结提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
@@ -70,10 +87,42 @@ def handle_video_with_subtitle(url, summary_level=None):
         print(f"[错误] {result['message']}")
         return False
 
+    # 自动模式：无字幕时自动切换到音频转写
     if not result['has_subtitle']:
-        print("[提示] 未找到字幕，切换到无字幕模式...")
-        print("[提示] 请使用 --audio 参数并提供音频下载链接")
-        return False
+        print("[自动模式] 该视频无字幕，将自动切换到音频转写模式...")
+        print()
+
+        # 自动获取音频下载链接（从yt-dlp获取）
+        print("[Step 1/3] 正在获取音频下载链接...")
+        try:
+            # 使用handle_video_without_subtitle继续处理
+            # 需要先获取音频URL
+            import subprocess
+            import json
+
+            cmd = ["yt-dlp", "--dump-json", "--no-download", "--skip-download", url]
+            probe_result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+
+            if probe_result.returncode == 0:
+                info = json.loads(probe_result.stdout)
+                video_title = info.get('title', '')
+
+                # 下载音频
+                audio_path = speech_to_text.download_audio_from_bilibili(url, video_title)
+
+                # 继续使用音频转写流程
+                return handle_video_without_subtitle_process(
+                    audio_path=audio_path,
+                    video_name=video_title,
+                    summary_level=summary_level,
+                    transcribe_model=config.DEFAULT_TRANSCRIBE_MODEL
+                )
+            else:
+                print(f"[错误] 获取视频信息失败")
+                return False
+        except Exception as e:
+            print(f"[错误] 自动模式切换失败: {e}")
+            return False
 
     md_path = result['subtitle_path']
     print(f"[Step 1/3] 完成: {md_path}")
@@ -104,6 +153,72 @@ def handle_video_with_subtitle(url, summary_level=None):
     return True
 
 
+def handle_video_without_subtitle_process(audio_path, video_name=None, summary_level=None, transcribe_model=None):
+    """
+    处理音频文件的通用函数（转写+总结）
+
+    Args:
+        audio_path: 音频文件路径
+        video_name: 视频名称
+        summary_level: 总结程度 ("brief", "normal", "detailed")
+        transcribe_model: 转录模型
+
+    Returns:
+        bool: 处理是否成功
+    """
+    # 获取总结提示词
+    if summary_level is None:
+        summary_level = config.DEFAULT_SUMMARY_LEVEL
+    prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
+
+    # 获取转录模型
+    if transcribe_model is None:
+        transcribe_model = config.DEFAULT_TRANSCRIBE_MODEL
+
+    print(f"[主流程] 模式: 音频转写")
+    if video_name:
+        print(f"[主流程] 视频名称: {video_name}")
+    print(f"[主流程] 总结程度: {summary_level}")
+    print(f"[主流程] 转录模型: {transcribe_model}")
+    print()
+
+    # Step 1: 转写音频
+    print("[Step 1/3] 正在转写音频...")
+    result = speech_to_text.transcribe_audio(audio_path, video_name=video_name, model=transcribe_model)
+
+    if not result['success']:
+        print(f"[错误] {result['message']}")
+        return False
+
+    md_path = result['md_path']
+    print(f"[Step 1/3] 完成: {md_path}")
+    print()
+
+    # Step 2: Claude总结
+    print(f"[Step 2/3] 正在使用Claude Code总结 (程度: {summary_level})...")
+    summary_result = summarizer.summarize_with_claude(md_path, prompt=prompt)
+
+    if not summary_result['success']:
+        print(f"[错误] {summary_result['message']}")
+        return False
+
+    print(f"[Step 2/3] 完成: {summary_result['summary_path']}")
+    print()
+
+    # 完成
+    print("=" * 60)
+    print("处理完成!")
+    print("=" * 60)
+    print(f"转写文件: {md_path}")
+    print(f"总结文件: {summary_result['summary_path']}")
+    print()
+    print("总结内容:")
+    print("-" * 60)
+    print(summary_result['summary'])
+
+    return True
+
+
 def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_model=None):
     """
     处理无字幕视频（需要音频转写）
@@ -113,6 +228,23 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
         summary_level: 总结程度 ("brief", "normal", "detailed")
         transcribe_model: 转录模型 (None/sensevoice/whisper/siliconflow)
     """
+    # 获取视频信息，用于智能选择总结力度
+    video_info = speech_to_text.get_bilibili_video_info(audio_url)
+    auto_summary_level = None
+
+    if video_info:
+        duration = video_info.get('duration', 0)
+        if duration > 0:
+            auto_summary_level = config.auto_select_summary_level(duration)
+            minutes = duration // 60
+            seconds = duration % 60
+            print(f"[主流程] 视频时长: {minutes}分{seconds}秒")
+            print(f"[主流程] 智能推荐总结程度: {auto_summary_level}")
+
+            # 如果用户未指定总结程度，使用智能推荐
+            if summary_level is None:
+                summary_level = auto_summary_level
+
     # 获取总结提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
@@ -379,8 +511,8 @@ def interactive_mode():
 
     while True:
         print("请选择操作:")
-        print("  1. 处理有字幕的B站视频")
-        print("  2. 处理无字幕的B站视频（需要音频转写）")
+        print("  1. 处理B站视频（自动检测是否有字幕）")
+        print("  2. 处理音频文件（本地/URL，音频转写）")
         print("  3. 总结现有的.md文件")
         print("  4. 转写temp_audio中的音频文件")
         print("  0. 退出")
@@ -395,23 +527,37 @@ def interactive_mode():
             url = input("请输入B站视频URL: ").strip()
             if url:
                 print()
-                # 选择总结程度
+                # 先获取视频信息，显示智能推荐总结程度
+                video_info = speech_to_text.get_bilibili_video_info(url)
+                auto_summary_level = "detailed"
+                if video_info:
+                    duration = video_info.get('duration', 0)
+                    if duration > 0:
+                        auto_summary_level = config.auto_select_summary_level(duration)
+                        minutes = duration // 60
+                        seconds = duration % 60
+                        print(f"[信息] 视频时长: {minutes}分{seconds}秒")
+
+                # 选择总结程度（显示智能推荐）
                 print("请选择总结程度:")
                 print("  1. 简洁 - 核心要点概述")
                 print("  2. 中等 - 标准总结")
-                print("  3. 详细 - 保留完整细节（默认）")
+                print(f"  3. 详细 - 保留完整细节（智能推荐: {auto_summary_level}）")
                 print()
                 try:
-                    level_choice = input("请输入选项 (1-3, 默认3): ").strip()
+                    level_choice = input("请输入选项 (1-3, 默认使用智能推荐): ").strip()
                 except EOFError:
-                    level_choice = "2"
+                    level_choice = ""
                 if level_choice == '1':
                     summary_level = "brief"
+                elif level_choice == '2':
+                    summary_level = "normal"
                 elif level_choice == '3':
                     summary_level = "detailed"
                 else:
-                    summary_level = "detailed"
+                    summary_level = auto_summary_level  # 使用智能推荐
                 print()
+                # 自动检测字幕并处理（无字幕时自动切换到音频转写）
                 handle_video_with_subtitle(url, summary_level=summary_level)
             else:
                 print("[提示] URL不能为空")
@@ -419,22 +565,35 @@ def interactive_mode():
             url = input("请输入音频下载链接: ").strip()
             if url:
                 print()
-                # 选择总结程度
+                # 先尝试获取视频信息，显示智能推荐总结程度
+                video_info = speech_to_text.get_bilibili_video_info(url)
+                auto_summary_level = "detailed"
+                if video_info:
+                    duration = video_info.get('duration', 0)
+                    if duration > 0:
+                        auto_summary_level = config.auto_select_summary_level(duration)
+                        minutes = duration // 60
+                        seconds = duration % 60
+                        print(f"[信息] 视频时长: {minutes}分{seconds}秒")
+
+                # 选择总结程度（显示智能推荐）
                 print("请选择总结程度:")
                 print("  1. 简洁 - 核心要点概述")
                 print("  2. 中等 - 标准总结")
-                print("  3. 详细 - 保留完整细节（默认）")
+                print(f"  3. 详细 - 保留完整细节（智能推荐: {auto_summary_level}）")
                 print()
                 try:
-                    level_choice = input("请输入选项 (1-3, 默认3): ").strip()
+                    level_choice = input("请输入选项 (1-3, 默认使用智能推荐): ").strip()
                 except EOFError:
-                    level_choice = "2"
+                    level_choice = ""
                 if level_choice == '1':
                     summary_level = "brief"
+                elif level_choice == '2':
+                    summary_level = "normal"
                 elif level_choice == '3':
                     summary_level = "detailed"
                 else:
-                    summary_level = "detailed"
+                    summary_level = auto_summary_level  # 使用智能推荐
                 # 选择转录模型
                 print()
                 print("请选择转录模型:")

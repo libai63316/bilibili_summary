@@ -521,6 +521,41 @@ def is_bilibili_url(url):
     return 'bilibili.com' in url and ('/video/' in url or '/bangumi/' in url)
 
 
+def get_bilibili_video_info(bilibili_url):
+    """
+    获取B站视频信息（时长、标题、是否有字幕等）
+
+    Args:
+        bilibili_url: B站视频URL
+
+    Returns:
+        dict: {
+            'title': str,  # 视频标题
+            'duration': int,  # 时长（秒）
+            'has_subtitle': bool  # 是否有字幕
+        } 或 None
+    """
+    import subprocess
+    import json
+
+    cmd = ["yt-dlp", "--dump-json", "--no-download", bilibili_url]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+
+        if result.returncode == 0:
+            info = json.loads(result.stdout)
+            return {
+                'title': info.get('title', ''),
+                'duration': info.get('duration', 0),
+                'has_subtitle': bool(info.get('subtitles') or info.get('automatic_captions'))
+            }
+    except Exception as e:
+        print(f"[警告] 获取视频信息失败: {e}")
+
+    return None
+
+
 def download_audio_from_bilibili(bilibili_url, video_name=None):
     """
     使用yt-dlp从B站视频下载音频
