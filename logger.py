@@ -32,9 +32,10 @@ file_handler = logging.FileHandler(get_log_file(), encoding='utf-8')
 file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
 
-# 控制台处理器（只显示INFO及以上级别）
+# 控制台处理器（只显示ERROR级别）
+# @auth: ljz @date: 2026-03-30 只在控制台显示错误日志，info日志写入文件即可
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
+console_handler.setLevel(logging.ERROR)
 console_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
 
 # 添加处理器
