@@ -51,7 +51,8 @@ def extract_subtitles(bilibili_url):
         ]
 
         print(f"[字幕提取] 执行命令: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
+        # @auth: ljz @date: 2026-03-30 添加errors参数避免编码错误
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
         if result.returncode != 0:
             print(f"[字幕提取] yt-dlp错误: {result.stderr}")

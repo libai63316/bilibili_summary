@@ -96,6 +96,14 @@ def transcribe_with_sensevoice(audio_path):
     global _sensevoice_model, _sensevoice_model_device
 
     try:
+        # @auth: ljz @date: 2026-03-30 抑制FunASR的非关键警告（不影响功能）
+        # FunASR会输出 "Loading remote code failed" 等警告，但模型仍能正常工作
+        # 因为模型最终从本地缓存加载，这些警告可以安全忽略
+        import logging
+        logging.getLogger("funasr").setLevel(logging.ERROR)
+        import warnings
+        warnings.filterwarnings("ignore", message=".*trust_remote_code.*")
+
         from funasr import AutoModel
         import torch
 
@@ -170,7 +178,7 @@ def transcribe_with_sensevoice(audio_path):
                             '-ss', str(start), '-to', str(end),
                             '-ar', '16000', '-ac', '1',
                             segment_path
-                        ], capture_output=True, errors='replace')
+                        ], capture_output=True, text=True, encoding='utf-8', errors='replace')  # @auth: ljz @date: 2026-03-30 添加编码参数
 
                         # 转写该段
                         print(f"[转写]   转写中...")
