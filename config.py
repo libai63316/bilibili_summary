@@ -35,7 +35,28 @@ def ensure_directories():
 ensure_directories()
 
 
+# ========== 公共工具函数 ==========
+
+def sanitize_filename(name):
+    """
+    清理文件名，移除非法字符
+    @auth: ljz @date: 2026-03-30 提取公共函数，避免重复代码
+
+    Args:
+        name: 原始文件名
+
+    Returns:
+        str: 清理后的安全文件名
+    """
+    safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', '。', '，')).strip()
+    return safe_name.replace(' ', '_')
+
+
 # ========== 历史记录管理 ==========
+
+# @auth: ljz @date: 2026-03-30 历史记录内存缓存，减少文件IO
+_history_cache = None
+
 
 def load_history():
     """
@@ -44,12 +65,20 @@ def load_history():
     Returns:
         list: 历史记录列表
     """
+    global _history_cache
+    # @auth: ljz @date: 2026-03-30 使用内存缓存
+    if _history_cache is not None:
+        return _history_cache
+
     if not os.path.exists(HISTORY_FILE):
+        _history_cache = []
         return []
     try:
         with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            _history_cache = json.load(f)
+            return _history_cache
     except Exception:
+        _history_cache = []
         return []
 
 
@@ -60,6 +89,9 @@ def save_history(history):
     Args:
         history: 历史记录列表
     """
+    global _history_cache
+    # @auth: ljz @date: 2026-03-30 更新内存缓存
+    _history_cache = history
     try:
         with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=2)

@@ -37,9 +37,8 @@ def download_audio(audio_url, video_name=None):
     timestamp = time.strftime('%Y%m%d_%H%M')
 
     if video_name:
-        # 清理视频名称中的非法字符
-        safe_name = "".join(c for c in video_name if c.isalnum() or c in (' ', '-', '_', '。', '，')).strip()
-        safe_name = safe_name.replace(' ', '_')
+        # @auth: ljz @date: 2026-03-30 使用公共函数清理文件名
+        safe_name = config.sanitize_filename(video_name)
         filename = f"{safe_name}_{timestamp}.mp3"
     else:
         filename = f"audio_{timestamp}.mp3"
@@ -57,7 +56,8 @@ def download_audio(audio_url, video_name=None):
         downloaded = 0
 
         with open(output_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192):
+            # @auth: ljz @date: 2026-03-30 增大chunk_size提升下载效率
+            for chunk in response.iter_content(chunk_size=65536):
                 if chunk:
                     f.write(chunk)
                     downloaded += len(chunk)
@@ -470,17 +470,15 @@ def save_transcription_as_md(text, segments=None, audio_path=None, video_name=No
 
     # 确定文件名
     if video_name:
-        # 清理视频名称中的非法字符
-        safe_name = "".join(c for c in video_name if c.isalnum() or c in (' ', '-', '_', '。', '，')).strip()
-        safe_name = safe_name.replace(' ', '_')
+        # @auth: ljz @date: 2026-03-30 使用公共函数清理文件名
+        safe_name = config.sanitize_filename(video_name)
         filename = f"{safe_name}_{timestamp}.md"
     elif audio_path:
         # 从音频文件名获取名称
         audio_basename = os.path.basename(audio_path)
         audio_name = os.path.splitext(audio_basename)[0]
-        # 清理名称中的非法字符
-        safe_name = "".join(c for c in audio_name if c.isalnum() or c in (' ', '-', '_', '。', '，')).strip()
-        safe_name = safe_name.replace(' ', '_')
+        # @auth: ljz @date: 2026-03-30 使用公共函数清理文件名
+        safe_name = config.sanitize_filename(audio_name)
         filename = f"{safe_name}.md"
     else:
         filename = f"transcript_{timestamp}.md"
@@ -554,6 +552,10 @@ def extract_url(text):
     return None
 
 
+# @auth: ljz @date: 2026-03-30 短链接解析缓存，避免重复请求
+_short_url_cache = {}
+
+
 def resolve_short_url(url, timeout=5):
     """
     解析B站短链接，获取真实长链接
@@ -572,11 +574,18 @@ def resolve_short_url(url, timeout=5):
     if not url or 'b23.tv' not in url:
         return url
 
+    # @auth: ljz @date: 2026-03-30 检查缓存
+    if url in _short_url_cache:
+        print(f"[提示] 使用缓存的解析结果")
+        return _short_url_cache[url]
+
     try:
         print(f"[提示] 正在解析短链接: {url}")
         response = requests.head(url, allow_redirects=True, timeout=timeout)
         resolved_url = response.url
         print(f"[信息] 解析成功: {resolved_url}")
+        # @auth: ljz @date: 2026-03-30 缓存解析结果
+        _short_url_cache[url] = resolved_url
         return resolved_url
     except Exception as e:
         print(f"[提示] 短链接解析失败，将尝试直接使用: {e}")
@@ -641,7 +650,8 @@ def get_bilibili_video_info(bilibili_url):
     cmd = ["yt-dlp", "--dump-json", "--no-download", "--cookies", cookies_file, resolved_url]
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+        # @auth: ljz @date: 2026-03-30 添加timeout避免无限等待
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
 
         if result.returncode == 0:
             info = json.loads(result.stdout)
@@ -698,13 +708,13 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     ]
 
     try:
-        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+        # @auth: ljz @date: 2026-03-30 添加timeout避免无限等待
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
         if probe_result.returncode == 0:
             info = json.loads(probe_result.stdout)
             title = info.get('title', '') or video_name or ''
-            # 清理标题中的非法字符
-            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_', '。', '，')).strip()
-            safe_title = safe_title.replace(' ', '_')
+            # @auth: ljz @date: 2026-03-30 使用公共函数清理文件名
+            safe_title = config.sanitize_filename(title)
             if safe_title:
                 video_name = safe_title
     except Exception as e:
@@ -730,7 +740,7 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
         resolved_url
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
 
     if result.returncode != 0:
         logger.log_error(f"yt-dlp下载失败: {resolved_url}")
