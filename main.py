@@ -944,6 +944,10 @@ def interactive_mode():
         elif choice == '5':
             # 查看历史记录
             show_history()
+        elif choice == '0':
+            # 退出程序
+            print("[退出] 欢迎下次使用！")
+            break
         else:
             print("[提示] 无效选项，请重新选择")
 
