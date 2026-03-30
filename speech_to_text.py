@@ -434,7 +434,9 @@ def transcribe_with_siliconflow(audio_path, language="zh"):
         }
 
 
-def save_transcription_as_md(text, segments=None, audio_path=None, video_name=None, transcribe_tool=None):
+def save_transcription_as_md(text, segments=None, audio_path=None, video_name=None,
+                             transcribe_tool=None, video_url=None, duration=None,
+                             uploader=None, content_type=None):
     """
     将转写文本保存为Markdown文件
 
@@ -444,6 +446,10 @@ def save_transcription_as_md(text, segments=None, audio_path=None, video_name=No
         audio_path: 音频文件路径
         video_name: 视频名称
         transcribe_tool: 转写工具名称 (SenseVoice / Whisper)
+        video_url: 视频URL
+        duration: 时长（秒）
+        uploader: UP主
+        content_type: 内容类型
 
     Returns:
         str: 保存的.md文件路径
@@ -479,14 +485,26 @@ def save_transcription_as_md(text, segments=None, audio_path=None, video_name=No
     with open(md_path, 'w', encoding='utf-8') as f:
         title = video_name if video_name else "音频转写"
         f.write(f"# {title}\n\n")
-        f.write(f"转写时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+
+        # 视频信息区块
+        f.write("## 视频信息\n\n")
+        if video_url:
+            f.write(f"- **来源**: {video_url}\n")
+        if duration:
+            minutes = duration // 60
+            seconds = duration % 60
+            f.write(f"- **时长**: {minutes}分{seconds}秒\n")
+        if uploader:
+            f.write(f"- **UP主**: {uploader}\n")
+        if content_type and content_type != "general":
+            type_name = config.get_content_type_name(content_type) if hasattr(config, 'get_content_type_name') else content_type
+            f.write(f"- **内容类型**: {type_name}\n")
+        f.write(f"- **处理时间**: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         if transcribe_tool:
-            f.write(f"转写工具: {transcribe_tool}\n\n")
-        if video_name:
-            f.write(f"视频名称: {video_name}\n\n")
-        if audio_path:
-            f.write(f"音频文件: {audio_path}\n\n")
-        f.write("---\n\n")
+            f.write(f"- **转写工具**: {transcribe_tool}\n")
+        f.write("\n---\n\n")
+
+        # 转写文本
         f.write("## 转写文本\n\n")
         f.write(text)
 
@@ -553,7 +571,9 @@ def get_bilibili_video_info(bilibili_url):
         dict: {
             'title': str,  # 视频标题
             'duration': int,  # 时长（秒）
-            'has_subtitle': bool  # 是否有字幕
+            'has_subtitle': bool,  # 是否有字幕
+            'uploader': str,  # UP主
+            'url': str  # 视频URL
         } 或 None
     """
     import subprocess
@@ -569,7 +589,9 @@ def get_bilibili_video_info(bilibili_url):
             return {
                 'title': info.get('title', ''),
                 'duration': info.get('duration', 0),
-                'has_subtitle': bool(info.get('subtitles') or info.get('automatic_captions'))
+                'has_subtitle': bool(info.get('subtitles') or info.get('automatic_captions')),
+                'uploader': info.get('uploader', '') or info.get('channel', ''),
+                'url': bilibili_url
             }
     except Exception as e:
         print(f"[警告] 获取视频信息失败: {e}")
@@ -657,7 +679,8 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     return output_path
 
 
-def transcribe_audio(audio_url_or_path, video_name=None, model=None):
+def transcribe_audio(audio_url_or_path, video_name=None, model=None, video_url=None,
+                     duration=None, uploader=None, content_type=None):
     """
     转写音频文件的主函数
 
@@ -665,6 +688,10 @@ def transcribe_audio(audio_url_or_path, video_name=None, model=None):
         audio_url_or_path: 音频URL或本地文件路径
         video_name: 视频名称（可选），用于生成文件名
         model: 转录模型 (None/sensevoice/whisper/siliconflow)
+        video_url: 视频URL
+        duration: 时长（秒）
+        uploader: UP主
+        content_type: 内容类型
 
     Returns:
         dict: {
@@ -751,7 +778,11 @@ def transcribe_audio(audio_url_or_path, video_name=None, model=None):
         result.get('segments'),
         audio_path,
         video_name,
-        transcribe_tool=used_tool
+        transcribe_tool=used_tool,
+        video_url=video_url,
+        duration=duration,
+        uploader=uploader,
+        content_type=content_type
     )
 
     return {

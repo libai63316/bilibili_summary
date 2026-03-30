@@ -61,6 +61,8 @@ def print_usage():
     print("  4. 交互模式: python main.py --interactive")
     print("  5. 下载音频: python main.py --download <音频下载链接> [保存路径]")
     print("  6. 自动转写: python main.py --auto  (扫描temp_audio转写未处理的文件)")
+    print("  7. 查看历史: python main.py --history [数量]  (查看最近处理记录)")
+    print("  8. 清空历史: python main.py --clear-history")
     print()
     print("可选转录模型:")
     print("  sensevoice - SenseVoice (FunASR) 中文识别效果好（默认）")
@@ -83,14 +85,18 @@ def handle_video_with_subtitle(url, summary_level=None):
     video_info = speech_to_text.get_bilibili_video_info(url)
     auto_summary_level = None
     content_type = "general"
+    video_title = ""
+    video_duration = 0
+    video_uploader = ""
 
     if video_info:
-        duration = video_info.get('duration', 0)
-        title = video_info.get('title', '')
-        if duration > 0:
-            auto_summary_level = config.auto_select_summary_level(duration)
-            minutes = duration // 60
-            seconds = duration % 60
+        video_duration = video_info.get('duration', 0)
+        video_title = video_info.get('title', '')
+        video_uploader = video_info.get('uploader', '')
+        if video_duration > 0:
+            auto_summary_level = config.auto_select_summary_level(video_duration)
+            minutes = video_duration // 60
+            seconds = video_duration % 60
             print(f"[主流程] 视频时长: {minutes}分{seconds}秒")
             print(f"[主流程] 智能推荐总结程度: {auto_summary_level}")
 
@@ -99,8 +105,8 @@ def handle_video_with_subtitle(url, summary_level=None):
                 summary_level = auto_summary_level
 
         # 识别内容类型
-        if title:
-            content_type = config.detect_content_type(title)
+        if video_title:
+            content_type = config.detect_content_type(video_title)
             if content_type != "general":
                 print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
 
@@ -188,13 +194,26 @@ def handle_video_with_subtitle(url, summary_level=None):
     print("-" * 60)
     print(summary_result['summary'])
 
+    # 添加历史记录
+    config.add_history_record(
+        title=video_title,
+        url=url,
+        duration=video_duration,
+        uploader=video_uploader,
+        content_type=content_type,
+        subtitle_path=md_path,
+        summary_path=summary_result['summary_path']
+    )
+
     # 自动打开总结文件
     open_file(summary_result['summary_path'])
 
     return True
 
 
-def handle_video_without_subtitle_process(audio_path, video_name=None, summary_level=None, transcribe_model=None):
+def handle_video_without_subtitle_process(audio_path, video_name=None, summary_level=None,
+                                          transcribe_model=None, video_url=None, video_duration=None,
+                                          video_uploader=None):
     """
     处理音频文件的通用函数（转写+总结）
 
@@ -203,6 +222,9 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
         video_name: 视频名称
         summary_level: 总结程度 ("brief", "normal", "detailed")
         transcribe_model: 转录模型
+        video_url: 视频URL
+        video_duration: 时长（秒）
+        video_uploader: UP主
 
     Returns:
         bool: 处理是否成功
@@ -235,7 +257,15 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
 
     # Step 1: 转写音频
     print("[Step 1/3] 正在转写音频...")
-    result = speech_to_text.transcribe_audio(audio_path, video_name=video_name, model=transcribe_model)
+    result = speech_to_text.transcribe_audio(
+        audio_path,
+        video_name=video_name,
+        model=transcribe_model,
+        video_url=video_url,
+        duration=video_duration,
+        uploader=video_uploader,
+        content_type=content_type
+    )
 
     if not result['success']:
         print(f"[错误] {result['message']}")
@@ -267,6 +297,17 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
     print("-" * 60)
     print(summary_result['summary'])
 
+    # 添加历史记录
+    config.add_history_record(
+        title=video_name,
+        url=video_url,
+        duration=video_duration,
+        uploader=video_uploader,
+        content_type=content_type,
+        subtitle_path=md_path,
+        summary_path=summary_result['summary_path']
+    )
+
     # 自动打开总结文件
     open_file(summary_result['summary_path'])
 
@@ -286,14 +327,18 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
     video_info = speech_to_text.get_bilibili_video_info(audio_url)
     auto_summary_level = None
     content_type = "general"
+    video_title = ""
+    video_duration = 0
+    video_uploader = ""
 
     if video_info:
-        duration = video_info.get('duration', 0)
-        title = video_info.get('title', '')
-        if duration > 0:
-            auto_summary_level = config.auto_select_summary_level(duration)
-            minutes = duration // 60
-            seconds = duration % 60
+        video_duration = video_info.get('duration', 0)
+        video_title = video_info.get('title', '')
+        video_uploader = video_info.get('uploader', '')
+        if video_duration > 0:
+            auto_summary_level = config.auto_select_summary_level(video_duration)
+            minutes = video_duration // 60
+            seconds = video_duration % 60
             print(f"[主流程] 视频时长: {minutes}分{seconds}秒")
             print(f"[主流程] 智能推荐总结程度: {auto_summary_level}")
 
@@ -302,8 +347,8 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
                 summary_level = auto_summary_level
 
         # 识别内容类型
-        if title:
-            content_type = config.detect_content_type(title)
+        if video_title:
+            content_type = config.detect_content_type(video_title)
             if content_type != "general":
                 print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
 
@@ -327,7 +372,14 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
 
     # Step 1: 下载音频并转写
     print("[Step 1/3] 下载音频并转写...")
-    result = speech_to_text.transcribe_audio(audio_url, model=transcribe_model)
+    result = speech_to_text.transcribe_audio(
+        audio_url,
+        model=transcribe_model,
+        video_url=audio_url if speech_to_text.is_bilibili_url(audio_url) else None,
+        duration=video_duration,
+        uploader=video_uploader,
+        content_type=content_type
+    )
 
     if not result['success']:
         print(f"[错误] {result['message']}")
@@ -358,6 +410,17 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
     print("总结内容:")
     print("-" * 60)
     print(summary_result['summary'])
+
+    # 添加历史记录
+    config.add_history_record(
+        title=video_title,
+        url=audio_url if speech_to_text.is_bilibili_url(audio_url) else None,
+        duration=video_duration,
+        uploader=video_uploader,
+        content_type=content_type,
+        subtitle_path=md_path,
+        summary_path=summary_result['summary_path']
+    )
 
     # 自动打开总结文件
     open_file(summary_result['summary_path'])
@@ -572,6 +635,47 @@ def handle_summarize_only(md_path=None, summary_level=None):
     return True
 
 
+def show_history(limit=20):
+    """
+    显示历史记录
+
+    Args:
+        limit: 显示记录数量
+    """
+    history = config.get_recent_history(limit)
+
+    if not history:
+        print("[历史记录] 暂无记录")
+        return
+
+    print(f"[历史记录] 最近 {len(history)} 条记录:")
+    print("=" * 70)
+    for i, record in enumerate(history, 1):
+        title = record.get('title', '未知标题')
+        duration = record.get('duration', 0)
+        mins = duration // 60
+        secs = duration % 60
+        uploader = record.get('uploader', '')
+        content_type = record.get('content_type', '')
+        process_time = record.get('process_time', '')
+        summary_path = record.get('summary_path', '')
+
+        print(f"{i}. {title}")
+        if uploader:
+            print(f"   UP主: {uploader}")
+        if duration:
+            print(f"   时长: {mins}分{secs}秒")
+        if content_type and content_type != "general":
+            type_name = config.get_content_type_name(content_type)
+            print(f"   类型: {type_name}")
+        print(f"   时间: {process_time}")
+        if summary_path:
+            print(f"   总结: {summary_path}")
+        print()
+
+    print("=" * 70)
+
+
 def interactive_mode():
     """
     交互模式
@@ -585,10 +689,11 @@ def interactive_mode():
         print("  2. 处理音频文件（本地/URL，音频转写）")
         print("  3. 总结现有的.md文件")
         print("  4. 转写temp_audio中的音频文件")
+        print("  5. 查看历史记录")
         print("  0. 退出")
         print()
 
-        choice = input("请输入选项 (0-4): ").strip()
+        choice = input("请输入选项 (0-5): ").strip()
 
         if choice == '0':
             print("再见!")
@@ -720,6 +825,9 @@ def interactive_mode():
                 transcribe_model = "sensevoice"
             print()
             handle_transcribe_audio_files(transcribe_model=transcribe_model)
+        elif choice == '5':
+            # 查看历史记录
+            show_history()
         else:
             print("[提示] 无效选项，请重新选择")
 
@@ -781,6 +889,15 @@ def main():
     elif sys.argv[1] == '--auto':
         # 自动转写temp_audio中未处理的文件
         speech_to_text.transcribe_untranscribed_in_temp()
+    elif sys.argv[1] == '--history':
+        # 查看历史记录
+        limit = 20
+        if len(sys.argv) >= 3 and sys.argv[2].isdigit():
+            limit = int(sys.argv[2])
+        show_history(limit)
+    elif sys.argv[1] == '--clear-history':
+        # 清空历史记录
+        config.clear_history()
     elif sys.argv[1] == '--model':
         # 指定转录模型
         if len(sys.argv) >= 3:

@@ -4,6 +4,8 @@
 # 配置文件
 
 import os
+import json
+import time
 
 # 项目根目录
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -16,6 +18,9 @@ SUMMARIES_DIR = os.path.join(OUTPUT_DIR, "summaries")
 # 音频文件临时目录
 TEMP_AUDIO_DIR = os.path.join(PROJECT_ROOT, "temp_audio")
 
+# 历史记录文件
+HISTORY_FILE = os.path.join(PROJECT_ROOT, "history.json")
+
 # 确保目录存在的函数
 def ensure_directories():
     """确保所有必要目录存在，不存在则创建"""
@@ -24,6 +29,98 @@ def ensure_directories():
 
 # 初始化时确保目录存在
 ensure_directories()
+
+
+# ========== 历史记录管理 ==========
+
+def load_history():
+    """
+    加载历史记录
+
+    Returns:
+        list: 历史记录列表
+    """
+    if not os.path.exists(HISTORY_FILE):
+        return []
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def save_history(history):
+    """
+    保存历史记录
+
+    Args:
+        history: 历史记录列表
+    """
+    try:
+        with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[警告] 保存历史记录失败: {e}")
+
+
+def add_history_record(title=None, url=None, duration=None, uploader=None,
+                       content_type=None, subtitle_path=None, summary_path=None):
+    """
+    添加一条历史记录
+
+    Args:
+        title: 视频标题
+        url: 视频URL
+        duration: 时长（秒）
+        uploader: UP主
+        content_type: 内容类型
+        subtitle_path: 字幕文件路径
+        summary_path: 总结文件路径
+    """
+    history = load_history()
+
+    record = {
+        "title": title or "未知标题",
+        "url": url or "",
+        "duration": duration or 0,
+        "uploader": uploader or "",
+        "content_type": content_type or "general",
+        "process_time": time.strftime('%Y-%m-%d %H:%M:%S'),
+        "subtitle_path": subtitle_path or "",
+        "summary_path": summary_path or ""
+    }
+
+    # 添加到列表开头（最新的在前）
+    history.insert(0, record)
+
+    # 最多保留100条记录
+    if len(history) > 100:
+        history = history[:100]
+
+    save_history(history)
+    return record
+
+
+def get_recent_history(limit=20):
+    """
+    获取最近的历史记录
+
+    Args:
+        limit: 返回记录数量
+
+    Returns:
+        list: 历史记录列表
+    """
+    history = load_history()
+    return history[:limit]
+
+
+def clear_history():
+    """
+    清空历史记录
+    """
+    save_history([])
+    print("[历史记录] 已清空")
 
 # Claude总结提示词模板
 SUMMARY_PROMPTS = {
