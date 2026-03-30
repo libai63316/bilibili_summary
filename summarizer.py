@@ -91,14 +91,13 @@ def summarize_with_claude(md_file_path, prompt=None):
                 f.write(full_prompt)
                 prompt_file = f.name
 
-            # 使用claude -p @file方式调用
-            # @auth: ljz @date: 2026-03-30 抑制内部调试日志输出
             result = subprocess.run(
                 ['claude', '-p', f'@{prompt_file}'],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,  # 丢弃内部调试日志
-                timeout=600,
-                env=get_claude_env()
+                capture_output=True,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                timeout=600
             )
         finally:
             if prompt_file and os.path.exists(prompt_file):
@@ -107,13 +106,7 @@ def summarize_with_claude(md_file_path, prompt=None):
         if result.returncode != 0:
             raise Exception(f"Claude Code错误")
 
-        # 解码输出并过滤调试日志
-        raw_output = result.stdout.decode('utf-8', errors='replace')
-        # 过滤掉Claude Code内部的调试日志
-        debug_keywords = ['Hook Init', 'Require', 'Hooking', 'console.log']
-        lines = raw_output.split('\n')
-        filtered_lines = [line for line in lines if not any(kw in line for kw in debug_keywords)]
-        summary = '\n'.join(filtered_lines).strip()
+        summary = result.stdout.strip()
 
         if not summary:
             raise Exception("Claude Code返回为空")
