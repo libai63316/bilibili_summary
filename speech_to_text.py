@@ -545,9 +545,46 @@ def extract_url(text):
     return None
 
 
+def resolve_short_url(url, timeout=5):
+    """
+    解析B站短链接，获取真实长链接
+    @auth: ljz
+    @date: 2026-03-30
+
+    Args:
+        url: 可能是短链接的URL
+        timeout: 请求超时时间（秒）
+
+    Returns:
+        str: 真实长链接，如果不是短链接或解析失败则返回原URL
+    """
+    import requests
+
+    if not url or 'b23.tv' not in url:
+        return url
+
+    try:
+        print(f"[提示] 正在解析短链接: {url}")
+        response = requests.head(url, allow_redirects=True, timeout=timeout)
+        resolved_url = response.url
+        print(f"[信息] 解析成功: {resolved_url}")
+        return resolved_url
+    except Exception as e:
+        print(f"[提示] 短链接解析失败，将尝试直接使用: {e}")
+        return url
+
+
 def is_bilibili_url(url):
     """
     检查URL是否是B站视频链接
+    @auth: ljz
+    @date: 2026-03-30 支持短链接和移动端链接
+
+    支持格式：
+    - 长链接: https://www.bilibili.com/video/BVxxx
+    - 短链接: https://b23.tv/xxx
+    - 番剧: https://www.bilibili.com/bangumi/xxx
+    - 移动端: https://m.bilibili.com/video/xxx
 
     Args:
         url: URL字符串
@@ -557,15 +594,23 @@ def is_bilibili_url(url):
     """
     if not url:
         return False
+
+    # 支持短链接 b23.tv
+    if 'b23.tv' in url:
+        return True
+
+    # 支持长链接和移动端
     return 'bilibili.com' in url and ('/video/' in url or '/bangumi/' in url)
 
 
 def get_bilibili_video_info(bilibili_url):
     """
     获取B站视频信息（时长、标题、是否有字幕等）
+    @auth: ljz
+    @date: 2026-03-30 支持短链接解析
 
     Args:
-        bilibili_url: B站视频URL
+        bilibili_url: B站视频URL（支持短链接 b23.tv）
 
     Returns:
         dict: {
@@ -573,13 +618,16 @@ def get_bilibili_video_info(bilibili_url):
             'duration': int,  # 时长（秒）
             'has_subtitle': bool,  # 是否有字幕
             'uploader': str,  # UP主
-            'url': str  # 视频URL
+            'url': str  # 视频URL（解析后的长链接）
         } 或 None
     """
     import subprocess
     import json
 
-    cmd = ["yt-dlp", "--dump-json", "--no-download", bilibili_url]
+    # 先解析短链接（如果是 b23.tv 格式）
+    resolved_url = resolve_short_url(bilibili_url)
+
+    cmd = ["yt-dlp", "--dump-json", "--no-download", resolved_url]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
@@ -591,7 +639,7 @@ def get_bilibili_video_info(bilibili_url):
                 'duration': info.get('duration', 0),
                 'has_subtitle': bool(info.get('subtitles') or info.get('automatic_captions')),
                 'uploader': info.get('uploader', '') or info.get('channel', ''),
-                'url': bilibili_url
+                'url': resolved_url  # 使用解析后的长链接
             }
     except Exception as e:
         print(f"[警告] 获取视频信息失败: {e}")
@@ -602,9 +650,11 @@ def get_bilibili_video_info(bilibili_url):
 def download_audio_from_bilibili(bilibili_url, video_name=None):
     """
     使用yt-dlp从B站视频下载音频
+    @auth: ljz
+    @date: 2026-03-30 支持短链接解析
 
     Args:
-        bilibili_url: B站视频URL
+        bilibili_url: B站视频URL（支持短链接 b23.tv）
         video_name: 视频名称（可选）
 
     Returns:
@@ -613,18 +663,21 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     import subprocess
     import json
 
+    # 先解析短链接（如果是 b23.tv 格式）
+    resolved_url = resolve_short_url(bilibili_url)
+
     config.ensure_directories()
     timestamp = time.strftime('%Y%m%d_%H%M')
 
     # 获取视频信息
-    print(f"[B站下载] 正在分析视频: {bilibili_url}")
+    print(f"[B站下载] 正在分析视频: {resolved_url}")
 
     # 先获取视频标题
     probe_cmd = [
         "yt-dlp",
         "--dump-json",
         "--no-download",
-        bilibili_url
+        resolved_url
     ]
 
     try:
@@ -647,7 +700,7 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
 
     output_path = os.path.join(config.TEMP_AUDIO_DIR, filename)
 
-    print(f"[B站下载] 正在下载音频: {bilibili_url}")
+    print(f"[B站下载] 正在下载音频: {resolved_url}")
     print(f"[B站下载] 保存至: {output_path}")
 
     # 使用yt-dlp下载音频（选择最佳音频格式，哔哩哔哩通常是m4a）
@@ -658,7 +711,7 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
         "--progress",
         "--newline",
         "-o", output_path,
-        bilibili_url
+        resolved_url
     ]
 
     # 实时显示下载进度
