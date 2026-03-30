@@ -6,6 +6,7 @@
 import sys
 import os
 import glob
+import subprocess
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -14,6 +15,32 @@ import config
 import subtitle_extractor
 import speech_to_text
 import summarizer
+
+
+def open_file(path):
+    """
+    用默认程序打开文件（完成后自动打开总结文件）
+
+    Args:
+        path: 文件路径
+    """
+    if not os.path.exists(path):
+        print(f"[警告] 文件不存在: {path}")
+        return
+
+    try:
+        # Windows: 使用默认程序打开文件
+        if sys.platform == 'win32':
+            os.startfile(path)
+        # macOS: 使用 open 命令
+        elif sys.platform == 'darwin':
+            subprocess.run(['open', path])
+        # Linux: 使用 xdg-open
+        else:
+            subprocess.run(['xdg-open', path])
+        print(f"[自动打开] 已打开: {path}")
+    except Exception as e:
+        print(f"[警告] 无法自动打开文件: {e}")
 
 
 def print_banner():
@@ -150,6 +177,9 @@ def handle_video_with_subtitle(url, summary_level=None):
     print("-" * 60)
     print(summary_result['summary'])
 
+    # 自动打开总结文件
+    open_file(summary_result['summary_path'])
+
     return True
 
 
@@ -215,6 +245,9 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
     print("总结内容:")
     print("-" * 60)
     print(summary_result['summary'])
+
+    # 自动打开总结文件
+    open_file(summary_result['summary_path'])
 
     return True
 
@@ -293,6 +326,9 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
     print("总结内容:")
     print("-" * 60)
     print(summary_result['summary'])
+
+    # 自动打开总结文件
+    open_file(summary_result['summary_path'])
 
     return True
 
@@ -487,7 +523,6 @@ def handle_summarize_only(md_path=None, summary_level=None):
 
     print(f"[Step 1/2] 完成: {result['summary_path']}")
     print()
-
     # 完成
     print("=" * 60)
     print("总结完成!")
@@ -498,6 +533,9 @@ def handle_summarize_only(md_path=None, summary_level=None):
     print("总结内容:")
     print("-" * 60)
     print(result['summary'])
+
+    # 自动打开总结文件
+    open_file(result['summary_path'])
 
     return True
 

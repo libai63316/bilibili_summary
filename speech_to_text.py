@@ -136,21 +136,34 @@ def transcribe_with_sensevoice(audio_path):
                 duration_sec = hours * 3600 + mins * 60 + secs
                 print(f"[转写] 音频时长: {duration_sec}秒")
 
-                if duration_sec > 300:
+                if duration_sec > 480:
                     # 音频超过5分钟，分段处理
                     print(f"[转写] 音频较长，将分段处理...")
-                    # 分段为5分钟一段
-                    segment_duration = 300
+                    # 分段为8分钟一段
+                    segment_duration = 480
                     segments_dir = os.path.join(config.TEMP_AUDIO_DIR, f"segments_{int(time.time())}")
                     os.makedirs(segments_dir, exist_ok=True)
+
+                    # 计算总段数
+                    total_segments = (duration_sec + segment_duration - 1) // segment_duration
+                    print(f"[转写] 音频较长，将分段处理，共 {total_segments} 段")
 
                     all_texts = []
                     for i in range(0, duration_sec, segment_duration):
                         start = i
                         end = min(i + segment_duration, duration_sec)
                         segment_path = os.path.join(segments_dir, f"segment_{i}_{end}.m4a")
+                        current_segment = i // segment_duration + 1
 
-                        print(f"[转写] 处理第 {i//segment_duration + 1} 段: {start}-{end}秒")
+                        # 显示进度
+                        minutes_start = start // 60
+                        seconds_start = start % 60
+                        minutes_end = end // 60
+                        seconds_end = end % 60
+                        print(f"[转写] 第 {current_segment}/{total_segments} 段 ({minutes_start}分{seconds_start}秒 - {minutes_end}分{seconds_end}秒)...")
+
+                        # 切割音频段
+                        print(f"[转写]   切割音频...")
                         subprocess.run([
                             ffmpeg_path, '-y', '-i', audio_path,
                             '-ss', str(start), '-to', str(end),
@@ -158,6 +171,8 @@ def transcribe_with_sensevoice(audio_path):
                             segment_path
                         ], capture_output=True, errors='replace')
 
+                        # 转写该段
+                        print(f"[转写]   转写中...")
                         result = model.generate(
                             input=segment_path,
                             use_itn=True,
@@ -168,10 +183,13 @@ def transcribe_with_sensevoice(audio_path):
                             res = result[0]
                             text = res.get('text', '') if isinstance(res, dict) else str(res)
                             all_texts.append(text)
+                            print(f"[转写]   第 {current_segment}/{total_segments} 段完成")
 
                     # 清理分段文件
                     import shutil
                     shutil.rmtree(segments_dir, ignore_errors=True)
+
+                    print(f"[转写] 分段转写完成，共处理 {total_segments} 段")
 
                     return {
                         'success': True,
@@ -181,6 +199,9 @@ def transcribe_with_sensevoice(audio_path):
                     }
         except Exception as e:
             print(f"[转写] 时长检测失败: {e}")
+
+        # 非分段模式：直接转写
+        print("[转写] 正在转写，请稍候...")
 
         # 执行转写，use_itn=True 使用ITN（逆文本正则化）获得可读文本
         result = model.generate(
@@ -608,17 +629,29 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     print(f"[B站下载] 保存至: {output_path}")
 
     # 使用yt-dlp下载音频（选择最佳音频格式，哔哩哔哩通常是m4a）
+    # 显示下载进度
     cmd = [
         "yt-dlp",
         "-f", "bestaudio/best",
+        "--progress",
+        "--newline",
         "-o", output_path,
         bilibili_url
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
+    # 实时显示下载进度
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                               text=True, encoding='utf-8', errors='replace')
+    for line in process.stdout:
+        line = line.strip()
+        if line:
+            # 显示yt-dlp的进度输出
+            print(f"[B站下载] {line}")
 
-    if result.returncode != 0:
-        raise Exception(f"yt-dlp下载失败: {result.stderr}")
+    process.wait()
+
+    if process.returncode != 0:
+        raise Exception(f"yt-dlp下载失败")
 
     print(f"[B站下载] 完成: {output_path}")
     return output_path
