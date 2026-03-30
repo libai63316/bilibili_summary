@@ -679,6 +679,8 @@ def show_history(limit=20):
 def interactive_mode():
     """
     交互模式
+    @auth: ljz
+    @date: 2026-03-30 支持直接粘贴链接
     """
     print("[交互模式] 欢迎使用B站视频字幕提取与总结工具")
     print()
@@ -687,19 +689,92 @@ def interactive_mode():
         print("请选择操作:")
         print("  1. 处理B站视频（自动检测是否有字幕）")
         print("  2. 处理音频文件（本地/URL，音频转写）")
-        print("  3. 总结现有的.md文件")
+        print("  3. 总结现有的视频字幕.md文件")
         print("  4. 转写temp_audio中的音频文件")
         print("  5. 查看历史记录")
         print("  0. 退出")
         print()
 
-        choice = input("请输入选项 (0-5): ").strip()
+        choice = input("请输入选项 (0-5) 或直接粘贴视频链接: ").strip()
 
-        if choice == '0':
-            print("再见!")
-            break
+        # 检测是否是链接（支持粘贴带前缀的文本）
+        # @auth: ljz @date: 2026-03-30
+        url = speech_to_text.extract_url(choice)
+        if url:
+            # 直接处理链接
+            print()
+            print(f"[提示] 检测到链接，自动处理...")
+            if speech_to_text.is_bilibili_url(url):
+                # B站链接：获取视频信息并选择总结程度
+                video_info = speech_to_text.get_bilibili_video_info(url)
+                auto_summary_level = "detailed"
+                if video_info:
+                    duration = video_info.get('duration', 0)
+                    if duration > 0:
+                        auto_summary_level = config.auto_select_summary_level(duration)
+                        minutes = duration // 60
+                        seconds = duration % 60
+                        print(f"[信息] 视频时长: {minutes}分{seconds}秒")
+
+                # 选择总结程度
+                print("请选择总结程度:")
+                print("  1. 简洁 - 核心要点概述")
+                print("  2. 中等 - 标准总结")
+                print(f"  3. 详细 - 保留完整细节（智能推荐: {auto_summary_level}）")
+                print()
+                try:
+                    level_choice = input("请输入选项 (1-3, 默认使用智能推荐，按Enter直接开始): ").strip()
+                except EOFError:
+                    level_choice = ""
+                if level_choice == '1':
+                    summary_level = "brief"
+                elif level_choice == '2':
+                    summary_level = "normal"
+                elif level_choice == '3':
+                    summary_level = "detailed"
+                else:
+                    summary_level = auto_summary_level
+                print()
+                handle_video_with_subtitle(url, summary_level=summary_level)
+            else:
+                # 其他音频链接：选择转录模型和总结程度
+                print("[信息] 非B站链接，将进行音频转写...")
+                print()
+                print("请选择转录模型:")
+                print(f"  1. SenseVoice（中文效果好，默认）")
+                print("  2. Whisper（英文支持好）")
+                print()
+                try:
+                    model_choice = input("请输入选项 (1-2, 默认1): ").strip()
+                except EOFError:
+                    model_choice = ""
+                transcribe_model = None
+                if model_choice == '2':
+                    transcribe_model = "whisper"
+
+                # 选择总结程度
+                print("请选择总结程度:")
+                print("  1. 简洁 - 核心要点概述")
+                print("  2. 中等 - 标准总结")
+                print("  3. 详细 - 保留完整细节（默认）")
+                print()
+                try:
+                    level_choice = input("请输入选项 (1-3, 默认3，按Enter直接开始): ").strip()
+                except EOFError:
+                    level_choice = ""
+                if level_choice == '1':
+                    summary_level = "brief"
+                elif level_choice == '2':
+                    summary_level = "normal"
+                else:
+                    summary_level = "detailed"
+                print()
+                handle_video_without_subtitle(url, transcribe_model=transcribe_model, summary_level=summary_level)
         elif choice == '1':
             url = input("请输入B站视频URL: ").strip()
+            # 自动从文本中提取URL（支持粘贴包含无关前缀的文本）
+            # @auth: ljz @date: 2026-03-30
+            url = speech_to_text.extract_url(url)
             if url:
                 print()
                 # 先获取视频信息，显示智能推荐总结程度
@@ -738,6 +813,9 @@ def interactive_mode():
                 print("[提示] URL不能为空")
         elif choice == '2':
             url = input("请输入音频下载链接: ").strip()
+            # 自动从文本中提取URL（支持粘贴包含无关前缀的文本）
+            # @auth: ljz @date: 2026-03-30
+            url = speech_to_text.extract_url(url)
             if url:
                 print()
                 # 先尝试获取视频信息，显示智能推荐总结程度
@@ -844,15 +922,15 @@ def main():
         interactive_mode()
     elif len(sys.argv) == 2:
         # 一个参数，视为B站视频URL
-        url = sys.argv[1]
-        if url.startswith('http'):
+        url = speech_to_text.extract_url(sys.argv[1])  # @auth: ljz @date: 2026-03-30 自动提取URL
+        if url and url.startswith('http'):
             handle_video_with_subtitle(url)
         else:
             # 视为文件路径，进行总结
             handle_summarize_only(url)
     elif len(sys.argv) >= 3 and sys.argv[1] == '--audio':
         # 音频转写模式
-        audio_url = sys.argv[2]
+        audio_url = speech_to_text.extract_url(sys.argv[2])  # @auth: ljz @date: 2026-03-30 自动提取URL
         # 检查是否有--model参数
         transcribe_model = None
         if len(sys.argv) >= 5 and sys.argv[3] == '--model':
@@ -868,7 +946,7 @@ def main():
     elif sys.argv[1] == '--download':
         # 下载音频模式
         if len(sys.argv) >= 3:
-            audio_url = sys.argv[2]
+            audio_url = speech_to_text.extract_url(sys.argv[2])  # @auth: ljz @date: 2026-03-30 自动提取URL
             output_path = sys.argv[3] if len(sys.argv) >= 4 else None
         else:
             print_usage()

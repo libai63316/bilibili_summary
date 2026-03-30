@@ -95,7 +95,7 @@ def summarize_with_claude(md_file_path, prompt=None):
             result = subprocess.run(
                 ['claude', '-p', f'@{prompt_file}'],
                 capture_output=True,
-                timeout=120,
+                timeout=600,
                 env=get_claude_env()
             )
         finally:
@@ -133,7 +133,7 @@ def summarize_with_claude(md_file_path, prompt=None):
             'success': False,
             'summary': None,
             'summary_path': None,
-            'message': "Claude Code超时（超过2分钟）"
+            'message': "Claude Code超时（超过10分钟）"
         }
     except Exception as e:
         return {
