@@ -79,12 +79,14 @@ def handle_video_with_subtitle(url, summary_level=None):
         url: B站视频URL
         summary_level: 总结程度 ("brief", "normal", "detailed")
     """
-    # 获取视频信息，用于智能选择总结力度
+    # 获取视频信息，用于智能选择总结力度和内容类型识别
     video_info = speech_to_text.get_bilibili_video_info(url)
     auto_summary_level = None
+    content_type = "general"
 
     if video_info:
         duration = video_info.get('duration', 0)
+        title = video_info.get('title', '')
         if duration > 0:
             auto_summary_level = config.auto_select_summary_level(duration)
             minutes = duration // 60
@@ -96,10 +98,19 @@ def handle_video_with_subtitle(url, summary_level=None):
             if summary_level is None:
                 summary_level = auto_summary_level
 
+        # 识别内容类型
+        if title:
+            content_type = config.detect_content_type(title)
+            if content_type != "general":
+                print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
+
     # 获取总结提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
     prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
+
+    # 根据内容类型追加特定提示
+    prompt += config.get_content_type_prompt_suffix(content_type)
 
     print(f"[主流程] 模式: 有字幕视频")
     print(f"[主流程] 视频URL: {url}")
@@ -201,6 +212,16 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
         summary_level = config.DEFAULT_SUMMARY_LEVEL
     prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
 
+    # 识别内容类型
+    content_type = "general"
+    if video_name:
+        content_type = config.detect_content_type(video_name)
+        if content_type != "general":
+            print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
+
+    # 根据内容类型追加特定提示
+    prompt += config.get_content_type_prompt_suffix(content_type)
+
     # 获取转录模型
     if transcribe_model is None:
         transcribe_model = config.DEFAULT_TRANSCRIBE_MODEL
@@ -261,12 +282,14 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
         summary_level: 总结程度 ("brief", "normal", "detailed")
         transcribe_model: 转录模型 (None/sensevoice/whisper/siliconflow)
     """
-    # 获取视频信息，用于智能选择总结力度
+    # 获取视频信息，用于智能选择总结力度和内容类型识别
     video_info = speech_to_text.get_bilibili_video_info(audio_url)
     auto_summary_level = None
+    content_type = "general"
 
     if video_info:
         duration = video_info.get('duration', 0)
+        title = video_info.get('title', '')
         if duration > 0:
             auto_summary_level = config.auto_select_summary_level(duration)
             minutes = duration // 60
@@ -278,10 +301,19 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
             if summary_level is None:
                 summary_level = auto_summary_level
 
+        # 识别内容类型
+        if title:
+            content_type = config.detect_content_type(title)
+            if content_type != "general":
+                print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
+
     # 获取总结提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
     prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
+
+    # 根据内容类型追加特定提示
+    prompt += config.get_content_type_prompt_suffix(content_type)
 
     # 获取转录模型
     if transcribe_model is None:

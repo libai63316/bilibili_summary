@@ -107,6 +107,98 @@ def auto_select_summary_level(duration):
     """
     if duration < 60:
         return "brief"
-    elif duration > 600:
+    elif duration > 300:
         return "detailed"
     return "normal"
+
+
+# 内容类型及其关键词和特定提示词
+CONTENT_TYPES = {
+    "tutorial": {
+        "name": "教程类",
+        "keywords": ["教程", "教学", "如何", "怎么", "指南", "入门", "学习", "讲解", "手把手", "干货", "技巧", "方法", "步骤", "操作"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个教程类视频，请保留所有步骤、要点、操作细节，按教学逻辑组织总结，让读者能按总结复现内容。"
+    },
+    "news": {
+        "name": "新闻类",
+        "keywords": ["新闻", "报道", "最新", "突发", "消息", "官方", "发布", "通知", "声明", "事件"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个新闻类视频，请客观报道事实，保留时间、地点、人物、事件等关键信息，按新闻结构组织总结。"
+    },
+    "vlog": {
+        "name": "Vlog/生活",
+        "keywords": ["vlog", "日常", "生活", "记录", "分享", "旅行", "出游", "体验", "打卡", "探店"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个Vlog/生活记录类视频，请保留作者的体验感受、情感表达、有趣细节和场景描述。"
+    },
+    "tech": {
+        "name": "科技类",
+        "keywords": ["科技", "数码", "评测", "手机", "电脑", "AI", "人工智能", "软件", "硬件", "新品", "芯片", "显卡", "处理器"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个科技类视频，请保留产品参数、功能特点、对比数据、优缺点分析等技术细节。"
+    },
+    "finance": {
+        "name": "财经类",
+        "keywords": ["财经", "经济", "投资", "股票", "理财", "金融", "市场", "分析", "基金", "交易"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个财经类视频，请保留数据、趋势分析、投资建议等专业信息，注意区分事实和观点。"
+    },
+    "entertainment": {
+        "name": "娱乐类",
+        "keywords": ["搞笑", "娱乐", "综艺", "游戏", "电影", "动漫", "音乐", "吐槽", "段子", "梗"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个娱乐类视频，请保留有趣的情节、梗点、笑点，让总结也能带来阅读乐趣。"
+    },
+    "knowledge": {
+        "name": "知识科普",
+        "keywords": ["科普", "知识", "历史", "科学", "原理", "揭秘", "解析", "冷知识", "涨知识"],
+        "prompt_suffix": "\n\n【内容类型提示】这是一个知识科普类视频，请保留知识点、原理解释、科学依据，按知识结构组织总结。"
+    }
+}
+
+
+def detect_content_type(title):
+    """
+    根据视频标题识别内容类型
+
+    Args:
+        title: 视频标题
+
+    Returns:
+        str: 内容类型键名，未识别返回 "general"
+    """
+    if not title:
+        return "general"
+
+    title_lower = title.lower()
+    for type_name, type_info in CONTENT_TYPES.items():
+        for keyword in type_info["keywords"]:
+            if keyword in title_lower:
+                return type_name
+
+    return "general"
+
+
+def get_content_type_prompt_suffix(content_type):
+    """
+    获取内容类型对应的提示词补充
+
+    Args:
+        content_type: 内容类型键名
+
+    Returns:
+        str: 提示词补充内容，未知类型返回空字符串
+    """
+    if content_type in CONTENT_TYPES:
+        return CONTENT_TYPES[content_type]["prompt_suffix"]
+    return ""
+
+
+def get_content_type_name(content_type):
+    """
+    获取内容类型的中文名称
+
+    Args:
+        content_type: 内容类型键名
+
+    Returns:
+        str: 中文名称
+    """
+    if content_type in CONTENT_TYPES:
+        return CONTENT_TYPES[content_type]["name"]
+    return "通用"

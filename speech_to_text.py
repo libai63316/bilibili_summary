@@ -136,11 +136,11 @@ def transcribe_with_sensevoice(audio_path):
                 duration_sec = hours * 3600 + mins * 60 + secs
                 print(f"[转写] 音频时长: {duration_sec}秒")
 
-                if duration_sec > 480:
-                    # 音频超过5分钟，分段处理
+                if duration_sec > 600:
+                    # 音频超过10分钟，分段处理
                     print(f"[转写] 音频较长，将分段处理...")
-                    # 分段为8分钟一段
-                    segment_duration = 480
+                    # 分段为10分钟一段
+                    segment_duration = 600
                     segments_dir = os.path.join(config.TEMP_AUDIO_DIR, f"segments_{int(time.time())}")
                     os.makedirs(segments_dir, exist_ok=True)
 
