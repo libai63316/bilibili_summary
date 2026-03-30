@@ -3,3 +3,7 @@ temp_audio/
 temp_subs
 *.pyc
 *.m4a
+cookies.txt
+history.json
+logs/
+__pycache__/

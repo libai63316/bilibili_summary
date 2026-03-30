@@ -10,6 +10,7 @@ import requests
 import config
 import glob
 import site
+import logger  # @auth: ljz @date: 2026-03-30 添加日志模块
 
 # 设置ffmpeg路径，让FunASR能找到
 import site
@@ -627,7 +628,9 @@ def get_bilibili_video_info(bilibili_url):
     # 先解析短链接（如果是 b23.tv 格式）
     resolved_url = resolve_short_url(bilibili_url)
 
-    cmd = ["yt-dlp", "--dump-json", "--no-download", resolved_url]
+    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
+    cookies_file = config.COOKIES_FILE
+    cmd = ["yt-dlp", "--dump-json", "--no-download", "--cookies", cookies_file, resolved_url]
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
@@ -651,7 +654,7 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     """
     使用yt-dlp从B站视频下载音频
     @auth: ljz
-    @date: 2026-03-30 支持短链接解析
+    @date: 2026-03-30 支持短链接解析，添加日志
 
     Args:
         bilibili_url: B站视频URL（支持短链接 b23.tv）
@@ -663,6 +666,8 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     import subprocess
     import json
 
+    logger.log_info(f"开始下载音频: {bilibili_url}")
+
     # 先解析短链接（如果是 b23.tv 格式）
     resolved_url = resolve_short_url(bilibili_url)
 
@@ -672,11 +677,15 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     # 获取视频信息
     print(f"[B站下载] 正在分析视频: {resolved_url}")
 
+    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
+    cookies_file = config.COOKIES_FILE
+
     # 先获取视频标题
     probe_cmd = [
         "yt-dlp",
         "--dump-json",
         "--no-download",
+        "--cookies", cookies_file,
         resolved_url
     ]
 
@@ -705,11 +714,13 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
 
     # 使用yt-dlp下载音频（选择最佳音频格式，哔哩哔哩通常是m4a）
     # 显示下载进度
+    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
     cmd = [
         "yt-dlp",
         "-f", "bestaudio/best",
         "--progress",
         "--newline",
+        "--cookies", cookies_file,
         "-o", output_path,
         resolved_url
     ]
@@ -726,8 +737,10 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
     process.wait()
 
     if process.returncode != 0:
+        logger.log_error(f"yt-dlp下载失败: {resolved_url}")
         raise Exception(f"yt-dlp下载失败")
 
+    logger.log_info(f"音频下载完成: {output_path}")
     print(f"[B站下载] 完成: {output_path}")
     return output_path
 
@@ -754,6 +767,11 @@ def transcribe_audio(audio_url_or_path, video_name=None, model=None, video_url=N
             'message': str
         }
     """
+    # @auth: ljz @date: 2026-03-30 添加日志
+    logger.log_info(f"开始转写音频: {audio_url_or_path}")
+    if model:
+        logger.log_info(f"使用转录模型: {model}")
+
     # 判断是B站视频URL还是普通音频URL/本地文件
     if os.path.exists(audio_url_or_path):
         # 本地文件直接使用
@@ -838,6 +856,7 @@ def transcribe_audio(audio_url_or_path, video_name=None, model=None, video_url=N
         content_type=content_type
     )
 
+    logger.log_info(f"转写完成: {md_path}")
     return {
         'success': True,
         'text': result['text'],

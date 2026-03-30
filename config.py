@@ -21,6 +21,10 @@ TEMP_AUDIO_DIR = os.path.join(PROJECT_ROOT, "temp_audio")
 # 历史记录文件
 HISTORY_FILE = os.path.join(PROJECT_ROOT, "history.json")
 
+# Cookies文件路径（用于绕过B站WBI验证）
+# @auth: ljz @date: 2026-03-30
+COOKIES_FILE = os.path.join(PROJECT_ROOT, "cookies.txt")
+
 # 确保目录存在的函数
 def ensure_directories():
     """确保所有必要目录存在，不存在则创建"""

@@ -92,9 +92,11 @@ def summarize_with_claude(md_file_path, prompt=None):
                 prompt_file = f.name
 
             # 使用claude -p @file方式调用
+            # @auth: ljz @date: 2026-03-30 抑制内部调试日志输出
             result = subprocess.run(
                 ['claude', '-p', f'@{prompt_file}'],
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,  # 丢弃内部调试日志
                 timeout=600,
                 env=get_claude_env()
             )

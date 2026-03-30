@@ -15,6 +15,7 @@ import config
 import subtitle_extractor
 import speech_to_text
 import summarizer
+import logger  # @auth: ljz @date: 2026-03-30 添加日志模块
 
 
 def open_file(path):
@@ -81,6 +82,9 @@ def handle_video_with_subtitle(url, summary_level=None):
         url: B站视频URL
         summary_level: 总结程度 ("brief", "normal", "detailed")
     """
+    # @auth: ljz @date: 2026-03-30 添加日志记录
+    logger.log_info(f"开始处理视频: {url}")
+
     # 获取视频信息，用于智能选择总结力度和内容类型识别
     video_info = speech_to_text.get_bilibili_video_info(url)
     auto_summary_level = None
@@ -93,12 +97,15 @@ def handle_video_with_subtitle(url, summary_level=None):
         video_duration = video_info.get('duration', 0)
         video_title = video_info.get('title', '')
         video_uploader = video_info.get('uploader', '')
+        logger.log_video_info(video_title, video_duration, video_uploader, url)
+
         if video_duration > 0:
             auto_summary_level = config.auto_select_summary_level(video_duration)
             minutes = video_duration // 60
             seconds = video_duration % 60
             print(f"[主流程] 视频时长: {minutes}分{seconds}秒")
             print(f"[主流程] 智能推荐总结程度: {auto_summary_level}")
+            logger.log_info(f"智能推荐总结程度: {auto_summary_level}")
 
             # 如果用户未指定总结程度，使用智能推荐
             if summary_level is None:
@@ -108,7 +115,9 @@ def handle_video_with_subtitle(url, summary_level=None):
         if video_title:
             content_type = config.detect_content_type(video_title)
             if content_type != "general":
-                print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
+                content_type_name = config.get_content_type_name(content_type)
+                print(f"[主流程] 智能识别内容类型: {content_type_name}")
+                logger.log_info(f"智能识别内容类型: {content_type_name}")
 
     # 获取总结提示词
     if summary_level is None:
@@ -121,69 +130,67 @@ def handle_video_with_subtitle(url, summary_level=None):
     print(f"[主流程] 模式: 有字幕视频")
     print(f"[主流程] 视频URL: {url}")
     print(f"[主流程] 总结程度: {summary_level}")
+    logger.log_info(f"处理模式: 有字幕视频, 总结程度: {summary_level}")
     print()
 
     # Step 1: 提取字幕
+    logger.log_step(1, "提取字幕")
     print("[Step 1/3] 提取字幕...")
     result = subtitle_extractor.extract_subtitles(url)
 
     if not result['success']:
+        logger.log_error(f"字幕提取失败: {result['message']}")
         print(f"[错误] {result['message']}")
         return False
 
     # 自动模式：无字幕时自动切换到音频转写
     if not result['has_subtitle']:
+        logger.log_info("视频无字幕，自动切换到音频转写模式")
         print("[自动模式] 该视频无字幕，将自动切换到音频转写模式...")
         print()
 
-        # 自动获取音频下载链接（从yt-dlp获取）
-        print("[Step 1/3] 正在获取音频下载链接...")
+        # 下载音频
+        print("[Step 1/3] 正在下载音频...")
         try:
-            # 使用handle_video_without_subtitle继续处理
-            # 需要先获取音频URL
-            import subprocess
-            import json
+            audio_path = speech_to_text.download_audio_from_bilibili(url, video_title)
+            logger.log_info(f"音频下载完成: {audio_path}")
 
-            cmd = ["yt-dlp", "--dump-json", "--no-download", "--skip-download", url]
-            probe_result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
-
-            if probe_result.returncode == 0:
-                info = json.loads(probe_result.stdout)
-                video_title = info.get('title', '')
-
-                # 下载音频
-                audio_path = speech_to_text.download_audio_from_bilibili(url, video_title)
-
-                # 继续使用音频转写流程
-                return handle_video_without_subtitle_process(
-                    audio_path=audio_path,
-                    video_name=video_title,
-                    summary_level=summary_level,
-                    transcribe_model=config.DEFAULT_TRANSCRIBE_MODEL
-                )
-            else:
-                print(f"[错误] 获取视频信息失败")
-                return False
+            # 继续使用音频转写流程
+            return handle_video_without_subtitle_process(
+                audio_path=audio_path,
+                video_name=video_title,
+                summary_level=summary_level,
+                transcribe_model=config.DEFAULT_TRANSCRIBE_MODEL,
+                video_url=url,
+                video_duration=video_duration,
+                video_uploader=video_uploader
+            )
         except Exception as e:
+            logger.log_error(f"自动模式切换失败: {e}")
             print(f"[错误] 自动模式切换失败: {e}")
             return False
 
     md_path = result['subtitle_path']
+    logger.log_info(f"字幕提取完成: {md_path}")
     print(f"[Step 1/3] 完成: {md_path}")
     print()
 
     # Step 2: Claude总结
+    logger.log_step(2, "Claude Code总结")
     print(f"[Step 2/3] 正在使用Claude Code总结 (程度: {summary_level})...")
     summary_result = summarizer.summarize_with_claude(md_path, prompt=prompt)
 
     if not summary_result['success']:
+        logger.log_error(f"总结失败: {summary_result['message']}")
         print(f"[错误] {summary_result['message']}")
         return False
 
+    logger.log_info(f"总结完成: {summary_result['summary_path']}")
     print(f"[Step 2/3] 完成: {summary_result['summary_path']}")
     print()
 
     # 完成
+    logger.log_info(f"处理完成: {video_title}")
     print("=" * 60)
     print("处理完成!")
     print("=" * 60)

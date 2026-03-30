@@ -37,12 +37,15 @@ def extract_subtitles(bilibili_url):
         # --write-auto-subs: 写入自动生成的字幕
         # --sub-lang zh-Hans,zh-Hant,en: 指定字幕语言
         # -o: 输出模板
+        # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
+        cookies_file = config.COOKIES_FILE
         cmd = [
             "yt-dlp",
             "--write-subs",
             "--write-auto-subs",
             "--sub-lang", "zh-Hans,zh-Hant,en",
             "--skip-download",
+            "--cookies", cookies_file,
             "-o", os.path.join(temp_dir, "%(id)s.%(ext)s"),
             bilibili_url
         ]
