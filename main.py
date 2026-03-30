@@ -7,6 +7,7 @@ import sys
 import os
 import glob
 import subprocess
+import time  # @auth: ljz @date: 2026-03-30 添加计时功能
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -82,6 +83,9 @@ def handle_video_with_subtitle(url, summary_level=None):
         url: B站视频URL
         summary_level: 总结程度 ("brief", "normal", "detailed")
     """
+    # @auth: ljz @date: 2026-03-30 添加计时功能
+    start_time = time.time()
+
     # @auth: ljz @date: 2026-03-30 添加日志记录
     logger.log_info(f"开始处理视频: {url}")
 
@@ -215,6 +219,10 @@ def handle_video_with_subtitle(url, summary_level=None):
     # 自动打开总结文件
     open_file(summary_result['summary_path'])
 
+    # @auth: ljz @date: 2026-03-30 显示总耗时
+    elapsed = time.time() - start_time
+    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
+
     return True
 
 
@@ -236,6 +244,8 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
     Returns:
         bool: 处理是否成功
     """
+    # @auth: ljz @date: 2026-03-30 添加计时功能
+    start_time = time.time()
     # 获取总结提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
@@ -318,6 +328,10 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
     # 自动打开总结文件
     open_file(summary_result['summary_path'])
 
+    # @auth: ljz @date: 2026-03-30 显示总耗时
+    elapsed = time.time() - start_time
+    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
+
     return True
 
 
@@ -330,6 +344,9 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
         summary_level: 总结程度 ("brief", "normal", "detailed")
         transcribe_model: 转录模型 (None/sensevoice/whisper/siliconflow)
     """
+    # @auth: ljz @date: 2026-03-30 添加计时功能
+    start_time = time.time()
+
     # 获取视频信息，用于智能选择总结力度和内容类型识别
     video_info = speech_to_text.get_bilibili_video_info(audio_url)
     auto_summary_level = None
@@ -431,6 +448,10 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
 
     # 自动打开总结文件
     open_file(summary_result['summary_path'])
+
+    # @auth: ljz @date: 2026-03-30 显示总耗时
+    elapsed = time.time() - start_time
+    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
 
     return True
 
@@ -560,6 +581,9 @@ def handle_summarize_only(md_path=None, summary_level=None):
         md_path: Markdown文件路径，如果为None则自动扫描未总结的文件
         summary_level: 总结程度 ("brief", "normal", "detailed")
     """
+    # @auth: ljz @date: 2026-03-30 添加计时功能
+    start_time = time.time()
+
     # 获取提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
@@ -597,6 +621,9 @@ def handle_summarize_only(md_path=None, summary_level=None):
 
         print("=" * 60)
         print(f"总结完成! 成功: {success_count}, 失败: {fail_count}")
+        # @auth: ljz @date: 2026-03-30 显示总耗时
+        elapsed = time.time() - start_time
+        print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
         print("=" * 60)
         return fail_count == 0
 
@@ -638,6 +665,10 @@ def handle_summarize_only(md_path=None, summary_level=None):
 
     # 自动打开总结文件
     open_file(result['summary_path'])
+
+    # @auth: ljz @date: 2026-03-30 显示总耗时
+    elapsed = time.time() - start_time
+    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
 
     return True
 
