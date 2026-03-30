@@ -709,34 +709,22 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
 
     output_path = os.path.join(config.TEMP_AUDIO_DIR, filename)
 
-    print(f"[B站下载] 正在下载音频: {resolved_url}")
-    print(f"[B站下载] 保存至: {output_path}")
+    print(f"[B站下载] 正在下载音频，请稍候...")
 
     # 使用yt-dlp下载音频（选择最佳音频格式，哔哩哔哩通常是m4a）
-    # 显示下载进度
-    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
+    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证，移除进度显示
     cmd = [
         "yt-dlp",
         "-f", "bestaudio/best",
-        "--progress",
-        "--newline",
+        "--no-progress",
         "--cookies", cookies_file,
         "-o", output_path,
         resolved_url
     ]
 
-    # 实时显示下载进度
-    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                               text=True, encoding='utf-8', errors='replace')
-    for line in process.stdout:
-        line = line.strip()
-        if line:
-            # 显示yt-dlp的进度输出
-            print(f"[B站下载] {line}")
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace')
 
-    process.wait()
-
-    if process.returncode != 0:
+    if result.returncode != 0:
         logger.log_error(f"yt-dlp下载失败: {resolved_url}")
         raise Exception(f"yt-dlp下载失败")
 

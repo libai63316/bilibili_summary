@@ -105,10 +105,15 @@ def summarize_with_claude(md_file_path, prompt=None):
                 os.unlink(prompt_file)
 
         if result.returncode != 0:
-            error_msg = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
-            raise Exception(f"Claude Code错误: {error_msg}")
+            raise Exception(f"Claude Code错误")
 
-        summary = result.stdout.decode('utf-8', errors='replace').strip()
+        # 解码输出并过滤调试日志
+        raw_output = result.stdout.decode('utf-8', errors='replace')
+        # 过滤掉Claude Code内部的调试日志
+        debug_keywords = ['Hook Init', 'Require', 'Hooking', 'console.log']
+        lines = raw_output.split('\n')
+        filtered_lines = [line for line in lines if not any(kw in line for kw in debug_keywords)]
+        summary = '\n'.join(filtered_lines).strip()
 
         if not summary:
             raise Exception("Claude Code返回为空")
