@@ -755,6 +755,8 @@ def interactive_mode():
                 print(f"[提示] 检测到链接，自动处理...")
                 if speech_to_text.is_bilibili_url(url):
                     # @auth: ljz @date: 2026-03-31 直接下载音频转写，转写完再选总结力度
+                    start_time = time.time()  # @auth: ljz @date: 2026-03-31 添加计时
+
                     # 获取视频信息
                     video_info = speech_to_text.get_bilibili_video_info(url)
                     video_title = video_info.get('title', '') if video_info else ''
@@ -842,6 +844,10 @@ def interactive_mode():
                             subtitle_path=md_path,
                             summary_path=summary_result['summary_path']
                         )
+
+                        # @auth: ljz @date: 2026-03-31 显示总耗时
+                        elapsed = time.time() - start_time
+                        print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
                     else:
                         print(f"[错误] {summary_result['message']}")
                 elif speech_to_text.is_xiaohongshu_url(url):
