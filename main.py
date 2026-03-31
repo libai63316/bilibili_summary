@@ -8,6 +8,7 @@ import os
 import glob
 import subprocess
 import time  # @auth: ljz @date: 2026-03-30 添加计时功能
+import threading  # @auth: ljz @date: 2026-03-31 添加多线程支持
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -753,7 +754,37 @@ def interactive_mode():
                 print()
                 print(f"[提示] 检测到链接，自动处理...")
                 if speech_to_text.is_bilibili_url(url):
-                    # B站链接：获取视频信息并选择总结程度
+                    # @auth: ljz @date: 2026-03-31 使用多线程并行处理和选择
+                    # 后台线程：获取视频信息并处理
+                    processing_result = {'done': False, 'video_info': None, 'subtitle_result': None}
+
+                    def background_process():
+                        try:
+                            # 获取视频信息
+                            video_info = speech_to_text.get_bilibili_video_info(url)
+                            processing_result['video_info'] = video_info
+
+                            if video_info:
+                                duration = video_info.get('duration', 0)
+                                if duration > 0:
+                                    minutes = duration // 60
+                                    seconds = duration % 60
+                                    print(f"\r[信息] 视频时长: {minutes}分{seconds}秒")
+
+                            # 开始提取字幕
+                            print("[处理中] 正在提取字幕...")
+                            result = subtitle_extractor.extract_subtitles(url)
+                            processing_result['subtitle_result'] = result
+                        except Exception as e:
+                            processing_result['error'] = str(e)
+                        finally:
+                            processing_result['done'] = True
+
+                    # 启动后台处理线程
+                    process_thread = threading.Thread(target=background_process, daemon=True)
+                    process_thread.start()
+
+                    # 获取视频信息用于显示推荐（同步获取，较快）
                     video_info = speech_to_text.get_bilibili_video_info(url)
                     auto_summary_level = "detailed"
                     if video_info:
@@ -764,16 +795,20 @@ def interactive_mode():
                             seconds = duration % 60
                             print(f"[信息] 视频时长: {minutes}分{seconds}秒")
 
-                    # 选择总结程度
-                    print("请选择总结程度:")
+                    # 同时显示总结程度选择（不阻塞）
+                    print()
+                    print("请选择总结程度（处理将在后台继续）:")
                     print("  1. 简洁 - 核心要点概述")
                     print("  2. 中等 - 标准总结")
                     print(f"  3. 详细 - 保留完整细节（智能推荐: {auto_summary_level}）")
+                    print("  按 Enter 直接使用智能推荐，处理完成后自动开始总结")
                     print()
+
                     try:
-                        level_choice = input("请输入选项 (1-3, 默认使用智能推荐，按Enter直接开始): ").strip()
+                        level_choice = input("请输入选项 (1-3): ").strip()
                     except EOFError:
                         level_choice = ""
+
                     if level_choice == '1':
                         summary_level = "brief"
                     elif level_choice == '2':
@@ -782,8 +817,53 @@ def interactive_mode():
                         summary_level = "detailed"
                     else:
                         summary_level = auto_summary_level
-                    print()
-                    handle_video_with_subtitle(url, summary_level=summary_level)
+
+                    print(f"[选择] 总结程度: {summary_level}")
+                    print("[等待] 等待后台处理完成...")
+
+                    # 等待后台处理完成
+                    process_thread.join(timeout=300)
+
+                    if processing_result.get('error'):
+                        print(f"[错误] {processing_result['error']}")
+                        continue
+
+                    if not processing_result.get('done'):
+                        print("[警告] 处理超时")
+                        continue
+
+                    # 处理结果
+                    subtitle_result = processing_result.get('subtitle_result')
+                    video_info = processing_result.get('video_info') or video_info
+
+                    if subtitle_result and subtitle_result.get('success') and subtitle_result.get('has_subtitle'):
+                        # 有字幕，继续总结流程
+                        md_path = subtitle_result['subtitle_path']
+                        print(f"[完成] 字幕提取完成: {md_path}")
+
+                        # 获取总结提示词
+                        video_title = video_info.get('title', '') if video_info else ''
+                        content_type = config.detect_content_type(video_title) if video_title else 'general'
+                        prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
+                        prompt += config.get_content_type_prompt_suffix(content_type)
+
+                        # 进行总结
+                        print(f"[总结] 正在使用Claude Code总结 (程度: {summary_level})...")
+                        summary_result = summarizer.summarize_with_claude(md_path, prompt=prompt)
+
+                        if summary_result['success']:
+                            print(f"[完成] 总结已保存: {summary_result['summary_path']}")
+                            print()
+                            print("总结内容:")
+                            print("-" * 60)
+                            print(summary_result['summary'])
+                            open_file(summary_result['summary_path'])
+                        else:
+                            print(f"[错误] {summary_result['message']}")
+                    else:
+                        # 无字幕或失败，降级到音频转写
+                        print("[自动模式] 视频无字幕或提取失败，切换到音频转写...")
+                        handle_video_without_subtitle(url, summary_level=summary_level)
                 elif speech_to_text.is_xiaohongshu_url(url):
                     # @auth: ljz @date: 2026-03-31 新增小红书支持
                     # 小红书链接：获取视频信息并进行音频转写
