@@ -1,5 +1,23 @@
-yt-dlp>=2024.0.0
-requests>=2.28.0
-funasr>=2.0.0
-faster-whisper>=1.0.0
-imageio-ffmpeg>=0.5.0
+# @auth: ljz @date: 2026-03-31 锁定版本范围，添加缺失依赖
+
+# 视频下载
+yt-dlp>=2024.1.0,<2026.0.0
+
+# HTTP请求
+requests>=2.28.0,<3.0.0
+
+# 音频转写 - SenseVoice (FunASR)
+funasr>=2.0.0,<3.0.0
+
+# 音频转写 - Whisper
+faster-whisper>=1.0.0,<2.0.0
+
+# FFmpeg二进制
+imageio-ffmpeg>=0.5.0,<0.6.0
+
+# 深度学习框架 (FunASR依赖)
+torch>=2.0.0,<3.0.0
+torchaudio>=2.0.0,<3.0.0
+
+# 模型下载
+huggingface-hub>=0.20.0,<1.0.0

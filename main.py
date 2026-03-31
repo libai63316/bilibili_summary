@@ -82,21 +82,26 @@ def print_usage():
     print()
 
 
-def handle_video_with_subtitle(url, summary_level=None):
+# @auth: ljz @date: 2026-03-31 提取公共函数，减少重复代码
+def _get_video_info_and_config(url, summary_level=None):
     """
-    处理有字幕的视频（支持自动模式：无字幕时自动切换到音频转写）
+    获取视频信息并确定处理配置（公共函数）
 
     Args:
-        url: B站视频URL
-        summary_level: 总结程度 ("brief", "normal", "detailed")
+        url: 视频URL
+        summary_level: 用户指定的总结程度（可选）
+
+    Returns:
+        dict: {
+            'video_title': str,
+            'video_duration': int,
+            'video_uploader': str,
+            'content_type': str,
+            'auto_summary_level': str or None,
+            'summary_level': str,
+            'prompt': str
+        }
     """
-    # @auth: ljz @date: 2026-03-30 添加计时功能
-    start_time = time.time()
-
-    # @auth: ljz @date: 2026-03-30 添加日志记录
-    logger.log_info(f"开始处理视频: {url}")
-
-    # 获取视频信息，用于智能选择总结力度和内容类型识别
     video_info = speech_to_text.get_bilibili_video_info(url)
     auto_summary_level = None
     content_type = "general"
@@ -137,6 +142,96 @@ def handle_video_with_subtitle(url, summary_level=None):
 
     # 根据内容类型追加特定提示
     prompt += config.get_content_type_prompt_suffix(content_type)
+
+    return {
+        'video_title': video_title,
+        'video_duration': video_duration,
+        'video_uploader': video_uploader,
+        'content_type': content_type,
+        'auto_summary_level': auto_summary_level,
+        'summary_level': summary_level,
+        'prompt': prompt
+    }
+
+
+def _finalize_processing(video_title, video_url, video_duration, video_uploader,
+                         content_type, md_path, summary_result, start_time,
+                         transcribe_mode=False):
+    """
+    统一完成处理流程（公共函数）
+
+    Args:
+        video_title: 视频标题
+        video_url: 视频URL
+        video_duration: 视频时长
+        video_uploader: UP主
+        content_type: 内容类型
+        md_path: 字幕/转写文件路径
+        summary_result: 总结结果字典
+        start_time: 开始时间（用于计算耗时）
+        transcribe_mode: 是否为转写模式
+
+    Returns:
+        bool: True
+    """
+    logger.log_info(f"处理完成: {video_title}")
+    print("=" * 60)
+    print("处理完成!")
+    print("=" * 60)
+
+    if transcribe_mode:
+        print(f"转写文件: {md_path}")
+    else:
+        print(f"字幕文件: {md_path}")
+    print(f"总结文件: {summary_result['summary_path']}")
+    print()
+    print("总结内容:")
+    print("-" * 60)
+    print(summary_result['summary'])
+
+    # 添加历史记录
+    config.add_history_record(
+        title=video_title,
+        url=video_url,
+        duration=video_duration,
+        uploader=video_uploader,
+        content_type=content_type,
+        subtitle_path=md_path,
+        summary_path=summary_result['summary_path']
+    )
+
+    # 自动打开总结文件
+    open_file(summary_result['summary_path'])
+
+    # 显示总耗时
+    elapsed = time.time() - start_time
+    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
+
+    return True
+
+
+def handle_video_with_subtitle(url, summary_level=None):
+    """
+    处理有字幕的视频（支持自动模式：无字幕时自动切换到音频转写）
+
+    Args:
+        url: B站视频URL
+        summary_level: 总结程度 ("brief", "normal", "detailed")
+    """
+    # @auth: ljz @date: 2026-03-30 添加计时功能
+    start_time = time.time()
+
+    # @auth: ljz @date: 2026-03-30 添加日志记录
+    logger.log_info(f"开始处理视频: {url}")
+
+    # @auth: ljz @date: 2026-03-31 使用公共函数获取视频信息和配置
+    info = _get_video_info_and_config(url, summary_level)
+    video_title = info['video_title']
+    video_duration = info['video_duration']
+    video_uploader = info['video_uploader']
+    content_type = info['content_type']
+    summary_level = info['summary_level']
+    prompt = info['prompt']
 
     print(f"[主流程] 模式: 有字幕视频")
     print(f"[主流程] 视频URL: {url}")
@@ -200,37 +295,18 @@ def handle_video_with_subtitle(url, summary_level=None):
     print(f"[Step 2/3] 完成: {summary_result['summary_path']}")
     print()
 
-    # 完成
-    logger.log_info(f"处理完成: {video_title}")
-    print("=" * 60)
-    print("处理完成!")
-    print("=" * 60)
-    print(f"字幕文件: {md_path}")
-    print(f"总结文件: {summary_result['summary_path']}")
-    print()
-    print("总结内容:")
-    print("-" * 60)
-    print(summary_result['summary'])
-
-    # 添加历史记录
-    config.add_history_record(
-        title=video_title,
-        url=url,
-        duration=video_duration,
-        uploader=video_uploader,
+    # @auth: ljz @date: 2026-03-31 使用公共函数完成处理流程
+    return _finalize_processing(
+        video_title=video_title,
+        video_url=url,
+        video_duration=video_duration,
+        video_uploader=video_uploader,
         content_type=content_type,
-        subtitle_path=md_path,
-        summary_path=summary_result['summary_path']
+        md_path=md_path,
+        summary_result=summary_result,
+        start_time=start_time,
+        transcribe_mode=False
     )
-
-    # 自动打开总结文件
-    open_file(summary_result['summary_path'])
-
-    # @auth: ljz @date: 2026-03-30 显示总耗时
-    elapsed = time.time() - start_time
-    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
-
-    return True
 
 
 def handle_video_without_subtitle_process(audio_path, video_name=None, summary_level=None,
@@ -253,6 +329,7 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
     """
     # @auth: ljz @date: 2026-03-30 添加计时功能
     start_time = time.time()
+
     # 获取总结提示词
     if summary_level is None:
         summary_level = config.DEFAULT_SUMMARY_LEVEL
@@ -310,36 +387,18 @@ def handle_video_without_subtitle_process(audio_path, video_name=None, summary_l
     print(f"[Step 2/3] 完成: {summary_result['summary_path']}")
     print()
 
-    # 完成
-    print("=" * 60)
-    print("处理完成!")
-    print("=" * 60)
-    print(f"转写文件: {md_path}")
-    print(f"总结文件: {summary_result['summary_path']}")
-    print()
-    print("总结内容:")
-    print("-" * 60)
-    print(summary_result['summary'])
-
-    # 添加历史记录
-    config.add_history_record(
-        title=video_name,
-        url=video_url,
-        duration=video_duration,
-        uploader=video_uploader,
+    # @auth: ljz @date: 2026-03-31 使用公共函数完成处理流程
+    return _finalize_processing(
+        video_title=video_name or "",
+        video_url=video_url,
+        video_duration=video_duration or 0,
+        video_uploader=video_uploader or "",
         content_type=content_type,
-        subtitle_path=md_path,
-        summary_path=summary_result['summary_path']
+        md_path=md_path,
+        summary_result=summary_result,
+        start_time=start_time,
+        transcribe_mode=True
     )
-
-    # 自动打开总结文件
-    open_file(summary_result['summary_path'])
-
-    # @auth: ljz @date: 2026-03-30 显示总耗时
-    elapsed = time.time() - start_time
-    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
-
-    return True
 
 
 def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_model=None):
@@ -354,42 +413,26 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
     # @auth: ljz @date: 2026-03-30 添加计时功能
     start_time = time.time()
 
-    # 获取视频信息，用于智能选择总结力度和内容类型识别
-    video_info = speech_to_text.get_bilibili_video_info(audio_url)
-    auto_summary_level = None
-    content_type = "general"
+    # @auth: ljz @date: 2026-03-31 使用公共函数获取视频信息和配置（仅B站URL）
     video_title = ""
     video_duration = 0
     video_uploader = ""
+    content_type = "general"
 
-    if video_info:
-        video_duration = video_info.get('duration', 0)
-        video_title = video_info.get('title', '')
-        video_uploader = video_info.get('uploader', '')
-        if video_duration > 0:
-            auto_summary_level = config.auto_select_summary_level(video_duration)
-            minutes = video_duration // 60
-            seconds = video_duration % 60
-            print(f"[主流程] 视频时长: {minutes}分{seconds}秒")
-            print(f"[主流程] 智能推荐总结程度: {auto_summary_level}")
-
-            # 如果用户未指定总结程度，使用智能推荐
-            if summary_level is None:
-                summary_level = auto_summary_level
-
-        # 识别内容类型
-        if video_title:
-            content_type = config.detect_content_type(video_title)
-            if content_type != "general":
-                print(f"[主流程] 智能识别内容类型: {config.get_content_type_name(content_type)}")
-
-    # 获取总结提示词
-    if summary_level is None:
-        summary_level = config.DEFAULT_SUMMARY_LEVEL
-    prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
-
-    # 根据内容类型追加特定提示
-    prompt += config.get_content_type_prompt_suffix(content_type)
+    # 判断是否是B站URL，获取视频信息
+    if speech_to_text.is_bilibili_url(audio_url):
+        info = _get_video_info_and_config(audio_url, summary_level)
+        video_title = info['video_title']
+        video_duration = info['video_duration']
+        video_uploader = info['video_uploader']
+        content_type = info['content_type']
+        summary_level = info['summary_level']
+        prompt = info['prompt']
+    else:
+        # 非B站URL，使用默认配置
+        if summary_level is None:
+            summary_level = config.DEFAULT_SUMMARY_LEVEL
+        prompt = config.SUMMARY_PROMPTS.get(summary_level, config.SUMMARY_PROMPTS["normal"])
 
     # 获取转录模型
     if transcribe_model is None:
@@ -431,36 +474,18 @@ def handle_video_without_subtitle(audio_url, summary_level=None, transcribe_mode
     print(f"[Step 2/3] 完成: {summary_result['summary_path']}")
     print()
 
-    # 完成
-    print("=" * 60)
-    print("处理完成!")
-    print("=" * 60)
-    print(f"转写文件: {md_path}")
-    print(f"总结文件: {summary_result['summary_path']}")
-    print()
-    print("总结内容:")
-    print("-" * 60)
-    print(summary_result['summary'])
-
-    # 添加历史记录
-    config.add_history_record(
-        title=video_title,
-        url=audio_url if speech_to_text.is_bilibili_url(audio_url) else None,
-        duration=video_duration,
-        uploader=video_uploader,
+    # @auth: ljz @date: 2026-03-31 使用公共函数完成处理流程
+    return _finalize_processing(
+        video_title=video_title,
+        video_url=audio_url if speech_to_text.is_bilibili_url(audio_url) else None,
+        video_duration=video_duration,
+        video_uploader=video_uploader,
         content_type=content_type,
-        subtitle_path=md_path,
-        summary_path=summary_result['summary_path']
+        md_path=md_path,
+        summary_result=summary_result,
+        start_time=start_time,
+        transcribe_mode=True
     )
-
-    # 自动打开总结文件
-    open_file(summary_result['summary_path'])
-
-    # @auth: ljz @date: 2026-03-30 显示总耗时
-    elapsed = time.time() - start_time
-    print(f"[完成] 总耗时: {int(elapsed // 60)}分{int(elapsed % 60)}秒")
-
-    return True
 
 
 def find_unsummarized_files():
@@ -719,6 +744,56 @@ def show_history(limit=20):
         print()
 
     print("=" * 70)
+
+
+# @auth: ljz @date: 2026-03-31 添加交互模式辅助函数
+def _select_summary_level(default_level="detailed"):
+    """
+    交互式选择总结程度
+
+    Args:
+        default_level: 默认总结程度
+
+    Returns:
+        str: 选择的总结程度
+    """
+    print("请选择总结程度:")
+    print("  1. 简洁 - 核心要点概述")
+    print("  2. 中等 - 标准总结")
+    print(f"  3. 详细 - 保留完整细节（默认）")
+    print()
+
+    try:
+        choice = input("请输入选项 (1-3): ").strip()
+    except EOFError:
+        choice = ""
+
+    if choice == '1':
+        return "brief"
+    elif choice == '2':
+        return "normal"
+    else:
+        return default_level
+
+
+def _select_transcribe_model():
+    """
+    交互式选择转录模型
+
+    Returns:
+        str or None: 选择的转录模型
+    """
+    print("请选择转录模型:")
+    print("  1. SenseVoice（中文效果好，默认）")
+    print("  2. Whisper（英文支持好）")
+    print()
+
+    try:
+        choice = input("请输入选项 (1-2, 默认1): ").strip()
+    except EOFError:
+        choice = ""
+
+    return "whisper" if choice == '2' else None
 
 
 def interactive_mode():

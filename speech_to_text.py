@@ -782,6 +782,51 @@ def get_xiaohongshu_video_info(xhs_url):
     return None
 
 
+# @auth: ljz @date: 2026-03-31 添加公共下载函数，减少重复代码
+def _download_audio_with_ytdlp(url, output_path, cookies_file=None, platform_name=""):
+    """
+    使用yt-dlp下载音频的公共函数
+
+    Args:
+        url: 视频URL
+        output_path: 输出路径
+        cookies_file: cookies文件路径（可选）
+        platform_name: 平台名称（用于日志）
+
+    Returns:
+        str: 下载后的音频文件路径
+
+    Raises:
+        Exception: 下载失败时抛出异常
+    """
+    import subprocess
+
+    cmd = [
+        "yt-dlp",
+        "-f", "bestaudio/best",
+        "--no-progress",
+    ]
+
+    if cookies_file:
+        cmd.extend(["--cookies", cookies_file])
+
+    cmd.extend(["-o", output_path, url])
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+    except subprocess.TimeoutExpired:
+        logger.log_error(f"yt-dlp下载超时: {url}")
+        raise Exception("音频下载超时（超过300秒）")
+
+    if result.returncode != 0:
+        logger.log_error(f"yt-dlp下载失败: {url}")
+        raise Exception(f"yt-dlp下载失败")
+
+    logger.log_info(f"音频下载完成: {output_path}")
+    print(f"[{platform_name}下载] 完成: {output_path}")
+    return output_path
+
+
 def download_audio_from_xiaohongshu(xhs_url, video_name=None):
     """
     使用yt-dlp从小红书视频下载音频

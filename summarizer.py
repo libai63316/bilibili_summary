@@ -8,6 +8,45 @@ import subprocess
 import config
 
 
+def _find_git_bash():
+    """
+    动态查找git-bash路径
+    @auth: ljz @date: 2026-03-31 消除硬编码路径
+
+    Returns:
+        str or None: git-bash路径
+    """
+    # 优先使用环境变量
+    env_path = os.environ.get('CLAUDE_CODE_GIT_BASH_PATH')
+    if env_path and os.path.exists(env_path):
+        return env_path
+
+    # 常见安装位置
+    common_paths = [
+        os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'Git', 'usr', 'bin', 'bash.exe'),
+        os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'Git', 'usr', 'bin', 'bash.exe'),
+        os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'Git', 'bin', 'bash.exe'),
+        os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'Git', 'bin', 'bash.exe'),
+    ]
+
+    for path in common_paths:
+        if os.path.exists(path):
+            return path
+
+    # 使用where命令查找（Windows）
+    try:
+        result = subprocess.run(['where', 'bash'], capture_output=True, text=True, timeout=10)
+        if result.returncode == 0:
+            paths = result.stdout.strip().split('\n')
+            for p in paths:
+                if 'git' in p.lower() and os.path.exists(p):
+                    return p
+    except Exception:
+        pass
+
+    return None
+
+
 def get_claude_env():
     """
     获取Claude Code运行所需的环境变量
@@ -19,19 +58,8 @@ def get_claude_env():
 
     # Windows上Claude Code需要git-bash
     if os.name == 'nt':
-        # 尝试查找git-bash
-        git_bash_paths = [
-            r"E:\Installed Apps\Git\usr\bin\bash.exe",
-            r"C:\Program Files\Git\bin\bash.exe",
-            r"C:\Program Files (x86)\Git\bin\bash.exe",
-        ]
-
-        bash_path = None
-        for path in git_bash_paths:
-            if os.path.exists(path):
-                bash_path = path
-                break
-
+        # @auth: ljz @date: 2026-03-31 使用动态查找替代硬编码路径
+        bash_path = _find_git_bash()
         if bash_path:
             env['CLAUDE_CODE_GIT_BASH_PATH'] = bash_path
 
