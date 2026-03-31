@@ -12,6 +12,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python main.py <视频URL>                        # 自动识别平台并处理
 python main.py --audio <音频URL> --model whisper   # 指定Whisper模型转写
 python main.py --summarize <md文件路径>        # 仅总结（不传路径则自动扫描未总结文件）
+python main.py --auto                          # 自动转写temp_audio中未处理的音频
+python main.py --download <音频URL> [保存路径] # 仅下载音频，不转写
 python main.py --history [数量]                # 查看历史记录
 python main.py --clear-history                 # 清空历史
 python main.py --interactive                   # 交互模式
@@ -89,6 +91,10 @@ logger.py              # 日志模块（控制台ERROR，文件INFO）
 - `logger.py` 提供日志功能
 - 控制台只显示ERROR级别，INFO日志写入 `logs/bilibili_subtitle_YYYY-MM-DD.log`
 
+### 历史记录内存缓存
+- `config.py` 使用 `_history_cache` 缓存历史记录，减少文件IO
+- 缓存仅在当前Python进程内有效，重启后重新从 `history.json` 加载
+
 ### 公共工具函数
 - `config.sanitize_filename()` - 清理文件名，移除非法字符（多处复用）
 - `speech_to_text.extract_url()` - 从粘贴文本中提取URL（支持带前缀的粘贴）
@@ -151,10 +157,11 @@ logger.py              # 日志模块（控制台ERROR，文件INFO）
 
 ```
 1. 处理B站视频（自动检测是否有字幕）
-2. 处理音频文件（本地/URL，音频转写）
-3. 总结现有的.md文件
-4. 转写temp_audio中的音频文件
-5. 查看历史记录
+2. 处理小红书视频（音频转写）
+3. 处理其他音频文件（本地/URL，音频转写）
+4. 总结现有的视频字幕.md文件
+5. 转写temp_audio中的音频文件
+6. 查看历史记录
 0. 退出
 ```
 
@@ -166,6 +173,11 @@ DEFAULT_TRANSCRIBE_MODEL = "sensevoice"  # 默认转录模型
 SUMMARY_PROMPTS = {...}                  # 三种总结提示词模板
 CONTENT_TYPES = {...}                    # 内容类型关键词和提示词
 ```
+
+可用转录模型（`config.py: AVAILABLE_TRANSCRIBE_MODELS`）：
+- `sensevoice` - SenseVoice (FunASR)，中文识别效果好，本地运行
+- `whisper` - Whisper (faster-whisper)，英文支持好，本地运行
+- `siliconflow` - SiliconFlow API，云端转写，需在config.py配置API Key
 
 历史记录管理函数：
 - `add_history_record()` - 添加记录
