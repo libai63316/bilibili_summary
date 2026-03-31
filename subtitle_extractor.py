@@ -50,8 +50,7 @@ def extract_subtitles(bilibili_url):
             bilibili_url
         ]
 
-        print(f"[字幕提取] 执行命令: {' '.join(cmd)}")
-        # @auth: ljz @date: 2026-03-30 添加timeout避免无限等待
+        # @auth: ljz @date: 2026-03-31 移除命令输出，避免干扰后台处理
         result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
 
         if result.returncode != 0:
@@ -75,8 +74,6 @@ def extract_subtitles(bilibili_url):
                 pattern = os.path.join(temp_dir, f"*.{ext}")
                 subtitle_files.extend(glob.glob(pattern))
 
-        print(f"[字幕提取] 找到字幕文件: {subtitle_files}")
-
         if not subtitle_files:
             return {
                 'success': True,
@@ -84,6 +81,8 @@ def extract_subtitles(bilibili_url):
                 'message': "未找到字幕文件",
                 'has_subtitle': False
             }
+
+        print(f"[字幕提取] 找到字幕文件: {len(subtitle_files)}个")
 
         # 转换字幕为Markdown
         md_path = convert_subtitles_to_md(subtitle_files[0])
