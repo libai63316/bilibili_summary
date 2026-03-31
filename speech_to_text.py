@@ -172,7 +172,6 @@ def transcribe_with_sensevoice(audio_path):
                         print(f"[转写] 第 {current_segment}/{total_segments} 段 ({minutes_start}分{seconds_start}秒 - {minutes_end}分{seconds_end}秒)...")
 
                         # 切割音频段
-                        print(f"[转写]   切割音频...")
                         subprocess.run([
                             ffmpeg_path, '-y', '-i', audio_path,
                             '-ss', str(start), '-to', str(end),
@@ -180,19 +179,28 @@ def transcribe_with_sensevoice(audio_path):
                             segment_path
                         ], capture_output=True, text=True, encoding='utf-8', errors='replace')  # @auth: ljz @date: 2026-03-30 添加编码参数
 
+                        # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm进度条输出
+                        import io
+                        import sys as _sys
+                        _old_stdout = _sys.stdout
+                        _sys.stdout = io.StringIO()  # 临时重定向stdout
+
                         # 转写该段
-                        print(f"[转写]   转写中...")
                         result = model.generate(
                             input=segment_path,
                             use_itn=True,
                             batch_size_s=60,
                         )
 
+                        _sys.stdout = _old_stdout  # 恢复stdout
+
                         if result and len(result) > 0:
                             res = result[0]
                             text = res.get('text', '') if isinstance(res, dict) else str(res)
                             all_texts.append(text)
                             print(f"[转写]   第 {current_segment}/{total_segments} 段完成")
+                        else:
+                            print(f"[转写]   第 {current_segment}/{total_segments} 段转写失败")
 
                     # 清理分段文件
                     import shutil
@@ -212,12 +220,21 @@ def transcribe_with_sensevoice(audio_path):
         # 非分段模式：直接转写
         print("[转写] 正在转写，请稍候...")
 
+        # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm进度条输出
+        import io
+        import sys as _sys
+        _old_stdout = _sys.stdout
+        _sys.stdout = io.StringIO()
+
         # 执行转写，use_itn=True 使用ITN（逆文本正则化）获得可读文本
         result = model.generate(
             input=audio_path,
             use_itn=True,
             batch_size_s=60,
         )
+
+        _sys.stdout = _old_stdout
+        print("[转写] 转写完成")
 
         if not result or len(result) == 0:
             return {
