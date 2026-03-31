@@ -1192,6 +1192,17 @@ def interactive_mode():
 
 def main():
     """主函数"""
+    # @auth: ljz @date: 2026-03-31 确保目录存在（延迟初始化）
+    config.ensure_directories()
+
+    # @auth: ljz @date: 2026-03-31 清理旧日志文件（保留30天）
+    logger.clean_old_logs(max_days=30)
+
+    # @auth: ljz @date: 2026-03-31 清理临时音频文件（超过24小时的文件）
+    cleaned = config.cleanup_temp_audio(max_age_hours=24, keep_latest=5)
+    if cleaned > 0:
+        print(f"[清理] 已清理 {cleaned} 个过期临时文件")
+
     print_banner()
 
     # 解析命令行参数

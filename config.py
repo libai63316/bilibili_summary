@@ -25,31 +25,46 @@ HISTORY_FILE = os.path.join(PROJECT_ROOT, "history.json")
 # @auth: ljz @date: 2026-03-30
 COOKIES_FILE = os.path.join(PROJECT_ROOT, "cookies.txt")
 
+# @auth: ljz @date: 2026-03-31 延迟初始化标志
+_directories_ensured = False
+
 # 确保目录存在的函数
 def ensure_directories():
     """确保所有必要目录存在，不存在则创建"""
+    global _directories_ensured
+    if _directories_ensured:
+        return
     for directory in [OUTPUT_DIR, SUBTITLES_DIR, SUMMARIES_DIR, TEMP_AUDIO_DIR]:
         os.makedirs(directory, exist_ok=True)
+    _directories_ensured = True
 
-# 初始化时确保目录存在
-ensure_directories()
+# @auth: ljz @date: 2026-03-31 移除导入时自动调用，改为在main函数开始时调用
+# 延迟初始化，避免导入模块时创建目录
 
 
 # ========== 公共工具函数 ==========
 
-def sanitize_filename(name):
+def sanitize_filename(name, max_length=100):
     """
-    清理文件名，移除非法字符
+    清理文件名，移除非法字符并限制长度
     @auth: ljz @date: 2026-03-30 提取公共函数，避免重复代码
+    @auth: ljz @date: 2026-03-31 添加max_length参数限制文件名长度
 
     Args:
         name: 原始文件名
+        max_length: 最大长度限制（默认100字符，Windows路径限制考虑）
 
     Returns:
         str: 清理后的安全文件名
     """
     safe_name = "".join(c for c in name if c.isalnum() or c in (' ', '-', '_', '。', '，')).strip()
-    return safe_name.replace(' ', '_')
+    safe_name = safe_name.replace(' ', '_')
+
+    # 限制文件名长度
+    if len(safe_name) > max_length:
+        safe_name = safe_name[:max_length]
+
+    return safe_name
 
 
 # ========== 历史记录管理 ==========
@@ -77,7 +92,10 @@ def load_history():
         with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
             _history_cache = json.load(f)
             return _history_cache
-    except Exception:
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        # @auth: ljz @date: 2026-03-31 指定具体异常类型并记录错误
+        if isinstance(e, json.JSONDecodeError):
+            print(f"[警告] 历史记录文件损坏，将重新创建: {e}")
         _history_cache = []
         return []
 
@@ -157,6 +175,49 @@ def clear_history():
     """
     save_history([])
     print("[历史记录] 已清空")
+
+
+# @auth: ljz @date: 2026-03-31 添加临时文件清理功能
+def cleanup_temp_audio(max_age_hours=24, keep_latest=5):
+    """
+    清理临时音频文件
+
+    Args:
+        max_age_hours: 文件保留时间（小时），默认24小时
+        keep_latest: 保留的最新文件数量，默认5个
+
+    Returns:
+        int: 清理的文件数量
+    """
+    import glob
+
+    if not os.path.exists(TEMP_AUDIO_DIR):
+        return 0
+
+    # 收集所有音频文件
+    audio_extensions = ['*.mp3', '*.wav', '*.m4a', '*.aac', '*.flac', '*.ogg', '*.part']
+    audio_files = []
+    for ext in audio_extensions:
+        audio_files.extend(glob.glob(os.path.join(TEMP_AUDIO_DIR, ext)))
+
+    if len(audio_files) <= keep_latest:
+        return 0
+
+    # 按修改时间排序（最新的在前）
+    audio_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+
+    cutoff_time = time.time() - (max_age_hours * 3600)
+    cleaned_count = 0
+
+    for file_path in audio_files[keep_latest:]:
+        if os.path.getmtime(file_path) < cutoff_time:
+            try:
+                os.remove(file_path)
+                cleaned_count += 1
+            except OSError as e:
+                print(f"[警告] 清理临时文件失败 {os.path.basename(file_path)}: {e}")
+
+    return cleaned_count
 
 # Claude总结提示词模板
 SUMMARY_PROMPTS = {

@@ -41,8 +41,8 @@ def _find_git_bash():
             for p in paths:
                 if 'git' in p.lower() and os.path.exists(p):
                     return p
-    except Exception:
-        pass
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass  # 查找失败不是致命错误，静默忽略
 
     return None
 

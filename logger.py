@@ -74,3 +74,34 @@ def log_video_info(title, duration, uploader, url):
     logger.info(f"视频时长: {duration}秒")
     logger.info(f"UP主: {uploader}")
     logger.debug(f"视频URL: {url}")
+
+
+# @auth: ljz @date: 2026-03-31 添加日志清理功能
+def clean_old_logs(max_days=30):
+    """
+    清理超过指定天数的日志文件
+
+    Args:
+        max_days: 保留天数（默认30天）
+
+    Returns:
+        int: 清理的文件数量
+    """
+    import glob
+    from datetime import timedelta
+
+    cutoff_date = datetime.now() - timedelta(days=max_days)
+    cleaned_count = 0
+
+    for log_file in glob.glob(os.path.join(LOG_DIR, "*.log")):
+        try:
+            # 从文件名提取日期或使用修改时间
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(log_file))
+            if file_mtime < cutoff_date:
+                os.remove(log_file)
+                logger.info(f"清理旧日志: {os.path.basename(log_file)}")
+                cleaned_count += 1
+        except Exception as e:
+            logger.warning(f"清理日志失败 {log_file}: {e}")
+
+    return cleaned_count

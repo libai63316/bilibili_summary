@@ -156,10 +156,12 @@ def convert_subtitles_to_md(subtitle_file):
     print(f"[字幕转换] 完成，共 {len(md_lines)} 行")
 
     # 清理临时字幕文件
+    # @auth: ljz @date: 2026-03-31 修复裸except语句
     try:
         os.remove(subtitle_file)
-    except:
-        pass
+    except (OSError, PermissionError) as e:
+        import logger
+        logger.log_warning(f"清理临时字幕文件失败: {e}")
 
     return md_path
 

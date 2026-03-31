@@ -345,7 +345,7 @@ def transcribe_with_whisper_local(audio_path, model_size="base", language="zh"):
         try:
             model = WhisperModel(model_size, device="cuda", compute_type=compute_type)
             print("[转写] 使用GPU加速")
-        except Exception:
+        except (RuntimeError, OSError):  # CUDA不可用或其他错误
             model = WhisperModel(model_size, device="cpu", compute_type="int8")
             print("[转写] 使用CPU计算")
 
