@@ -177,13 +177,15 @@ def transcribe_with_sensevoice(audio_path):
                             '-ss', str(start), '-to', str(end),
                             '-ar', '16000', '-ac', '1',
                             segment_path
-                        ], capture_output=True, text=True, encoding='utf-8', errors='replace')  # @auth: ljz @date: 2026-03-30 添加编码参数
+                        ], capture_output=True, text=True, encoding='utf-8', errors='replace')
 
-                        # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm进度条输出
+                        # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm输出
                         import io
                         import sys as _sys
                         _old_stdout = _sys.stdout
-                        _sys.stdout = io.StringIO()  # 临时重定向stdout
+                        _old_stderr = _sys.stderr
+                        _sys.stdout = io.StringIO()
+                        _sys.stderr = io.StringIO()
 
                         # 转写该段
                         result = model.generate(
@@ -192,13 +194,15 @@ def transcribe_with_sensevoice(audio_path):
                             batch_size_s=60,
                         )
 
-                        _sys.stdout = _old_stdout  # 恢复stdout
+                        # 恢复stdout和stderr
+                        _sys.stdout = _old_stdout
+                        _sys.stderr = _old_stderr
+                        print(f"[转写]   第 {current_segment}/{total_segments} 段完成")
 
                         if result and len(result) > 0:
                             res = result[0]
                             text = res.get('text', '') if isinstance(res, dict) else str(res)
                             all_texts.append(text)
-                            print(f"[转写]   第 {current_segment}/{total_segments} 段完成")
                         else:
                             print(f"[转写]   第 {current_segment}/{total_segments} 段转写失败")
 
@@ -218,22 +222,26 @@ def transcribe_with_sensevoice(audio_path):
             print(f"[转写] 时长检测失败: {e}")
 
         # 非分段模式：直接转写
-        print("[转写] 正在转写，请稍候...")
+        print("[转写] 正在转写...")
 
-        # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm进度条输出
+        # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm输出
         import io
         import sys as _sys
         _old_stdout = _sys.stdout
+        _old_stderr = _sys.stderr
         _sys.stdout = io.StringIO()
+        _sys.stderr = io.StringIO()
 
-        # 执行转写，use_itn=True 使用ITN（逆文本正则化）获得可读文本
+        # 执行转写
         result = model.generate(
             input=audio_path,
             use_itn=True,
             batch_size_s=60,
         )
 
+        # 恢复stdout和stderr
         _sys.stdout = _old_stdout
+        _sys.stderr = _old_stderr
         print("[转写] 转写完成")
 
         if not result or len(result) == 0:
