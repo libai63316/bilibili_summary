@@ -558,9 +558,9 @@ _short_url_cache = {}
 
 def resolve_short_url(url, timeout=5):
     """
-    解析B站短链接，获取真实长链接
+    解析短链接，获取真实长链接
     @auth: ljz
-    @date: 2026-03-30
+    @date: 2026-03-30 支持B站和小红书短链接
 
     Args:
         url: 可能是短链接的URL
@@ -571,7 +571,13 @@ def resolve_short_url(url, timeout=5):
     """
     import requests
 
-    if not url or 'b23.tv' not in url:
+    if not url:
+        return url
+
+    # 支持B站短链接 b23.tv 和小红书短链接 xhslink.com
+    is_short_url = 'b23.tv' in url or 'xhslink.com' in url
+
+    if not is_short_url:
         return url
 
     # @auth: ljz @date: 2026-03-30 检查缓存
@@ -622,6 +628,198 @@ def is_bilibili_url(url):
 
 
 def get_bilibili_video_info(bilibili_url):
+    """
+    获取B站视频信息（时长、标题、是否有字幕等）
+    @auth: ljz
+    @date: 2026-03-30 支持短链接解析
+    @date: 2026-03-31 恢复丢失的函数
+
+    Args:
+        bilibili_url: B站视频URL（支持短链接 b23.tv）
+
+    Returns:
+        dict: {
+            'title': str,  # 视频标题
+            'duration': int,  # 时长（秒）
+            'has_subtitle': bool,  # 是否有字幕
+            'uploader': str,  # UP主
+            'url': str  # 视频URL（解析后的长链接）
+        } 或 None
+    """
+    import subprocess
+    import json
+
+    # 先解析短链接（如果是 b23.tv 格式）
+    resolved_url = resolve_short_url(bilibili_url)
+
+    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
+    cookies_file = config.COOKIES_FILE
+    cmd = ["yt-dlp", "--dump-json", "--no-download", "--cookies", cookies_file, resolved_url]
+
+    try:
+        # @auth: ljz @date: 2026-03-30 添加timeout避免无限等待
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+
+        if result.returncode == 0:
+            info = json.loads(result.stdout)
+            return {
+                'title': info.get('title', ''),
+                'duration': info.get('duration', 0),
+                'has_subtitle': bool(info.get('subtitles') or info.get('automatic_captions')),
+                'uploader': info.get('uploader', '') or info.get('channel', ''),
+                'url': resolved_url  # 使用解析后的长链接
+            }
+    except Exception as e:
+        print(f"[警告] 获取视频信息失败: {e}")
+
+    return None
+
+
+def is_xiaohongshu_url(url):
+    """
+    检查URL是否是小红书视频链接
+    @auth: ljz
+    @date: 2026-03-31 新增小红书支持
+
+    支持格式：
+    - 短链接: http://xhslink.com/o/xxx 或 https://xhslink.com/xxx
+    - 长链接: https://www.xiaohongshu.com/discovery/item/xxx
+
+    Args:
+        url: URL字符串
+
+    Returns:
+        bool: 是否是小红书视频链接
+    """
+    if not url:
+        return False
+
+    # 支持短链接 xhslink.com
+    if 'xhslink.com' in url:
+        return True
+
+    # 支持长链接
+    return 'xiaohongshu.com' in url and '/discovery/item/' in url
+
+
+def get_xiaohongshu_video_info(xhs_url):
+    """
+    获取小红书视频信息（时长、标题、作者等）
+    @auth: ljz
+    @date: 2026-03-31 新增小红书支持
+
+    Args:
+        xhs_url: 小红书视频URL（支持短链接 xhslink.com）
+
+    Returns:
+        dict: {
+            'title': str,  # 视频标题
+            'duration': int,  # 时长（秒）
+            'uploader': str,  # 作者ID
+            'url': str  # 视频URL（解析后的长链接）
+        } 或 None
+    """
+    import subprocess
+    import json
+
+    # 先解析短链接（如果是 xhslink.com 格式）
+    resolved_url = resolve_short_url(xhs_url)
+
+    cmd = ["yt-dlp", "--dump-json", "--no-download", resolved_url]
+
+    try:
+        # @auth: ljz @date: 2026-03-31 添加timeout避免无限等待
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+
+        if result.returncode == 0:
+            info = json.loads(result.stdout)
+            return {
+                'title': info.get('title', ''),
+                'duration': int(info.get('duration', 0)),
+                'uploader': info.get('uploader_id', '') or info.get('uploader', ''),
+                'url': resolved_url  # 使用解析后的长链接
+            }
+    except Exception as e:
+        print(f"[警告] 获取小红书视频信息失败: {e}")
+
+    return None
+
+
+def download_audio_from_xiaohongshu(xhs_url, video_name=None):
+    """
+    使用yt-dlp从小红书视频下载音频
+    @auth: ljz
+    @date: 2026-03-31 新增小红书支持
+
+    Args:
+        xhs_url: 小红书视频URL（支持短链接 xhslink.com）
+        video_name: 视频名称（可选）
+
+    Returns:
+        str: 下载后的音频文件路径
+    """
+    import subprocess
+    import json
+
+    logger.log_info(f"开始下载小红书音频: {xhs_url}")
+
+    # 先解析短链接（如果是 xhslink.com 格式）
+    resolved_url = resolve_short_url(xhs_url)
+
+    config.ensure_directories()
+    timestamp = time.strftime('%Y%m%d_%H%M')
+
+    # 获取视频信息
+    print(f"[小红书下载] 正在分析视频: {resolved_url}")
+
+    # 先获取视频标题
+    probe_cmd = [
+        "yt-dlp",
+        "--dump-json",
+        "--no-download",
+        resolved_url
+    ]
+
+    try:
+        # @auth: ljz @date: 2026-03-31 添加timeout避免无限等待
+        probe_result = subprocess.run(probe_cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+        if probe_result.returncode == 0:
+            info = json.loads(probe_result.stdout)
+            title = info.get('title', '') or video_name or ''
+            # @auth: ljz @date: 2026-03-31 使用公共函数清理文件名
+            safe_title = config.sanitize_filename(title)
+            if safe_title:
+                video_name = safe_title
+    except Exception as e:
+        print(f"[小红书下载] 获取视频标题失败: {e}")
+
+    if video_name:
+        filename = f"{video_name}_{timestamp}.m4a"
+    else:
+        filename = f"xhs_audio_{timestamp}.m4a"
+
+    output_path = os.path.join(config.TEMP_AUDIO_DIR, filename)
+
+    print(f"[小红书下载] 正在下载音频，请稍候...")
+
+    # 使用yt-dlp下载音频（小红书视频通常是mp4格式）
+    cmd = [
+        "yt-dlp",
+        "-f", "bestaudio/best",
+        "--no-progress",
+        "-o", output_path,
+        resolved_url
+    ]
+
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+
+    if result.returncode != 0:
+        logger.log_error(f"yt-dlp下载失败: {resolved_url}")
+        raise Exception(f"yt-dlp下载失败")
+
+    logger.log_info(f"音频下载完成: {output_path}")
+    print(f"[小红书下载] 完成: {output_path}")
+    return output_path
     """
     获取B站视频信息（时长、标题、是否有字幕等）
     @auth: ljz
@@ -778,7 +976,7 @@ def transcribe_audio(audio_url_or_path, video_name=None, model=None, video_url=N
     if model:
         logger.log_info(f"使用转录模型: {model}")
 
-    # 判断是B站视频URL还是普通音频URL/本地文件
+    # 判断是B站视频URL、小红书视频URL还是普通音频URL/本地文件
     if os.path.exists(audio_url_or_path):
         # 本地文件直接使用
         audio_path = audio_url_or_path
@@ -792,6 +990,18 @@ def transcribe_audio(audio_url_or_path, video_name=None, model=None, video_url=N
                 'text': None,
                 'md_path': None,
                 'message': f"B站音频下载失败: {str(e)}"
+            }
+    elif is_xiaohongshu_url(audio_url_or_path):
+        # @auth: ljz @date: 2026-03-31 新增小红书支持
+        # 小红书视频URL，使用yt-dlp下载音频
+        try:
+            audio_path = download_audio_from_xiaohongshu(audio_url_or_path, video_name)
+        except Exception as e:
+            return {
+                'success': False,
+                'text': None,
+                'md_path': None,
+                'message': f"小红书音频下载失败: {str(e)}"
             }
     else:
         # 提取URL（处理"主链接：https://..."这种情况）

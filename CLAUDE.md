@@ -4,18 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-B站视频字幕提取与LLM总结工具 - 从B站视频提取字幕或转写音频，然后使用Claude Code CLI生成总结。
+视频字幕提取与LLM总结工具 - 从B站/小红书视频提取字幕或转写音频，然后使用Claude Code CLI生成总结。
 
 ## 常用命令
 
 ```bash
-python main.py <B站视频URL>                    # 自动模式：检测字幕，无字幕自动转写
+python main.py <视频URL>                        # 自动识别平台并处理
 python main.py --audio <音频URL> --model whisper   # 指定Whisper模型转写
 python main.py --summarize <md文件路径>        # 仅总结（不传路径则自动扫描未总结文件）
 python main.py --history [数量]                # 查看历史记录
 python main.py --clear-history                 # 清空历史
 python main.py --interactive                   # 交互模式
 ```
+
+## 支持的平台
+
+| 平台 | 字幕提取 | 音频转写 | 链接格式 |
+|------|----------|----------|----------|
+| B站 | ✓ (有字幕时) | ✓ (无字幕时) | `bilibili.com/video/`, `b23.tv/` |
+| 小红书 | ✗ | ✓ | `xiaohongshu.com/discovery/item/`, `xhslink.com/` |
 
 ## 依赖安装
 
