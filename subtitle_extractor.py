@@ -51,7 +51,16 @@ def extract_subtitles(bilibili_url):
         ]
 
         # @auth: ljz @date: 2026-03-31 移除命令输出，避免干扰后台处理
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+        # @auth: ljz @date: 2026-03-31 添加TimeoutExpired异常捕获
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=120)
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'subtitle_path': None,
+                'message': "字幕提取超时（超过120秒）",
+                'has_subtitle': False
+            }
 
         if result.returncode != 0:
             print(f"[字幕提取] yt-dlp错误: {result.stderr}")
@@ -63,16 +72,11 @@ def extract_subtitles(bilibili_url):
             }
 
         # 查找生成的字幕文件
+        # @auth: ljz @date: 2026-03-31 移除'or True'逻辑，简化筛选代码
         subtitle_files = []
         for ext in ['ass', 'srt', 'vtt']:
             pattern = os.path.join(temp_dir, f"*.{ext}")
-            subtitle_files.extend([f for f in glob.glob(pattern) if 'auto' in f or True])
-
-        if not subtitle_files:
-            # 尝试不筛选auto
-            for ext in ['ass', 'srt', 'vtt']:
-                pattern = os.path.join(temp_dir, f"*.{ext}")
-                subtitle_files.extend(glob.glob(pattern))
+            subtitle_files.extend(glob.glob(pattern))
 
         if not subtitle_files:
             return {

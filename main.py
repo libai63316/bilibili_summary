@@ -1126,14 +1126,24 @@ def main():
     elif len(sys.argv) == 2:
         # 一个参数，视为B站视频URL
         url = speech_to_text.extract_url(sys.argv[1])  # @auth: ljz @date: 2026-03-30 自动提取URL
+        # @auth: ljz @date: 2026-03-31 添加None检查避免程序崩溃
         if url and url.startswith('http'):
             handle_video_with_subtitle(url)
-        else:
+        elif url:
             # 视为文件路径，进行总结
             handle_summarize_only(url)
+        else:
+            print("[错误] 无法识别输入，请提供有效的URL或文件路径")
+            print_usage()
+            sys.exit(1)
     elif len(sys.argv) >= 3 and sys.argv[1] == '--audio':
         # 音频转写模式
         audio_url = speech_to_text.extract_url(sys.argv[2])  # @auth: ljz @date: 2026-03-30 自动提取URL
+        # @auth: ljz @date: 2026-03-31 添加None检查
+        if not audio_url:
+            print("[错误] 无法识别音频URL")
+            print_usage()
+            sys.exit(1)
         # 检查是否有--model参数
         transcribe_model = None
         if len(sys.argv) >= 5 and sys.argv[3] == '--model':
@@ -1150,6 +1160,11 @@ def main():
         # 下载音频模式
         if len(sys.argv) >= 3:
             audio_url = speech_to_text.extract_url(sys.argv[2])  # @auth: ljz @date: 2026-03-30 自动提取URL
+            # @auth: ljz @date: 2026-03-31 添加None检查
+            if not audio_url:
+                print("[错误] 无法识别音频URL")
+                print_usage()
+                sys.exit(1)
             output_path = sys.argv[3] if len(sys.argv) >= 4 else None
         else:
             print_usage()

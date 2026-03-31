@@ -134,10 +134,15 @@ def transcribe_with_sensevoice(audio_path):
                 [p for p in site.getsitepackages() if 'site-packages' in p][0],
                 'imageio_ffmpeg', 'binaries', 'ffmpeg.exe'
             )
-            probe_result = subprocess.run(
-                [ffmpeg_path, '-i', audio_path],
-                capture_output=True, text=True, encoding='utf-8', errors='replace'
-            )
+            # @auth: ljz @date: 2026-03-31 添加timeout和TimeoutExpired处理
+            try:
+                probe_result = subprocess.run(
+                    [ffmpeg_path, '-i', audio_path],
+                    capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30
+                )
+            except subprocess.TimeoutExpired:
+                print("[转写] ffmpeg时长检测超时")
+                raise Exception("音频时长检测超时")
             import re
             duration_match = re.search(r'Duration: (\d+):(\d+):(\d+)', probe_result.stderr)
             if duration_match:
@@ -172,31 +177,37 @@ def transcribe_with_sensevoice(audio_path):
                         print(f"[转写] 第 {current_segment}/{total_segments} 段 ({minutes_start}分{seconds_start}秒 - {minutes_end}分{seconds_end}秒)...")
 
                         # 切割音频段
-                        subprocess.run([
-                            ffmpeg_path, '-y', '-i', audio_path,
-                            '-ss', str(start), '-to', str(end),
-                            '-ar', '16000', '-ac', '1',
-                            segment_path
-                        ], capture_output=True, text=True, encoding='utf-8', errors='replace')
+                        # @auth: ljz @date: 2026-03-31 添加timeout和异常处理
+                        try:
+                            subprocess.run([
+                                ffmpeg_path, '-y', '-i', audio_path,
+                                '-ss', str(start), '-to', str(end),
+                                '-ar', '16000', '-ac', '1',
+                                segment_path
+                            ], capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=60)
+                        except subprocess.TimeoutExpired:
+                            print(f"[转写] 第 {current_segment}/{total_segments} 段切割超时")
+                            continue
 
                         # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm输出
+                        # @auth: ljz @date: 2026-03-31 使用try-finally确保stdout/stderr恢复
                         import io
                         import sys as _sys
                         _old_stdout = _sys.stdout
                         _old_stderr = _sys.stderr
-                        _sys.stdout = io.StringIO()
-                        _sys.stderr = io.StringIO()
+                        try:
+                            _sys.stdout = io.StringIO()
+                            _sys.stderr = io.StringIO()
 
-                        # 转写该段
-                        result = model.generate(
-                            input=segment_path,
-                            use_itn=True,
-                            batch_size_s=60,
-                        )
-
-                        # 恢复stdout和stderr
-                        _sys.stdout = _old_stdout
-                        _sys.stderr = _old_stderr
+                            # 转写该段
+                            result = model.generate(
+                                input=segment_path,
+                                use_itn=True,
+                                batch_size_s=60,
+                            )
+                        finally:
+                            _sys.stdout = _old_stdout
+                            _sys.stderr = _old_stderr
                         print(f"[转写]   第 {current_segment}/{total_segments} 段完成")
 
                         if result and len(result) > 0:
@@ -225,23 +236,24 @@ def transcribe_with_sensevoice(audio_path):
         print("[转写] 正在转写...")
 
         # @auth: ljz @date: 2026-03-31 抑制FunASR的tqdm输出
+        # @auth: ljz @date: 2026-03-31 使用try-finally确保stdout/stderr恢复
         import io
         import sys as _sys
         _old_stdout = _sys.stdout
         _old_stderr = _sys.stderr
-        _sys.stdout = io.StringIO()
-        _sys.stderr = io.StringIO()
+        try:
+            _sys.stdout = io.StringIO()
+            _sys.stderr = io.StringIO()
 
-        # 执行转写
-        result = model.generate(
-            input=audio_path,
-            use_itn=True,
-            batch_size_s=60,
-        )
-
-        # 恢复stdout和stderr
-        _sys.stdout = _old_stdout
-        _sys.stderr = _old_stderr
+            # 执行转写
+            result = model.generate(
+                input=audio_path,
+                use_itn=True,
+                batch_size_s=60,
+            )
+        finally:
+            _sys.stdout = _old_stdout
+            _sys.stderr = _old_stderr
         print("[转写] 转写完成")
 
         if not result or len(result) == 0:
@@ -836,7 +848,12 @@ def download_audio_from_xiaohongshu(xhs_url, video_name=None):
         resolved_url
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+    # @auth: ljz @date: 2026-03-31 添加TimeoutExpired异常捕获
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+    except subprocess.TimeoutExpired:
+        logger.log_error(f"yt-dlp下载超时: {resolved_url}")
+        raise Exception("音频下载超时（超过300秒）")
 
     if result.returncode != 0:
         logger.log_error(f"yt-dlp下载失败: {resolved_url}")
@@ -845,50 +862,6 @@ def download_audio_from_xiaohongshu(xhs_url, video_name=None):
     logger.log_info(f"音频下载完成: {output_path}")
     print(f"[小红书下载] 完成: {output_path}")
     return output_path
-    """
-    获取B站视频信息（时长、标题、是否有字幕等）
-    @auth: ljz
-    @date: 2026-03-30 支持短链接解析
-
-    Args:
-        bilibili_url: B站视频URL（支持短链接 b23.tv）
-
-    Returns:
-        dict: {
-            'title': str,  # 视频标题
-            'duration': int,  # 时长（秒）
-            'has_subtitle': bool,  # 是否有字幕
-            'uploader': str,  # UP主
-            'url': str  # 视频URL（解析后的长链接）
-        } 或 None
-    """
-    import subprocess
-    import json
-
-    # 先解析短链接（如果是 b23.tv 格式）
-    resolved_url = resolve_short_url(bilibili_url)
-
-    # @auth: ljz @date: 2026-03-30 使用cookies绕过WBI验证
-    cookies_file = config.COOKIES_FILE
-    cmd = ["yt-dlp", "--dump-json", "--no-download", "--cookies", cookies_file, resolved_url]
-
-    try:
-        # @auth: ljz @date: 2026-03-30 添加timeout避免无限等待
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
-
-        if result.returncode == 0:
-            info = json.loads(result.stdout)
-            return {
-                'title': info.get('title', ''),
-                'duration': info.get('duration', 0),
-                'has_subtitle': bool(info.get('subtitles') or info.get('automatic_captions')),
-                'uploader': info.get('uploader', '') or info.get('channel', ''),
-                'url': resolved_url  # 使用解析后的长链接
-            }
-    except Exception as e:
-        print(f"[警告] 获取视频信息失败: {e}")
-
-    return None
 
 
 def download_audio_from_bilibili(bilibili_url, video_name=None):
@@ -963,7 +936,12 @@ def download_audio_from_bilibili(bilibili_url, video_name=None):
         resolved_url
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+    # @auth: ljz @date: 2026-03-31 添加TimeoutExpired异常捕获
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+    except subprocess.TimeoutExpired:
+        logger.log_error(f"yt-dlp下载超时: {resolved_url}")
+        raise Exception("音频下载超时（超过300秒）")
 
     if result.returncode != 0:
         logger.log_error(f"yt-dlp下载失败: {resolved_url}")
