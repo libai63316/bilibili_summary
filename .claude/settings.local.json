@@ -1,7 +1,13 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(mv .tmp/INDEX.md .)",
+      "Bash(mv .tmp/arch .)",
+      "Bash(mv .tmp/concepts .)",
+      "Bash(mv .tmp/hotspots .)",
+      "Bash(rmdir .tmp)"
     ]
   }
 }
