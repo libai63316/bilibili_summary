@@ -1,6 +1,7 @@
 output/
 temp_audio/
 temp_subs
+.nexus-map/
 *.pyc
 *.m4a
 cookies.txt
